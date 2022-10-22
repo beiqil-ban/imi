@@ -9,10 +9,10 @@
 ```php
 [
     // 主服务器配置
-    'mainServer'    => [
+    'mainServer' => [
         'namespace'    => 'Imi\Swoole\Test\TCPServer\MainServer',
         'type'         => Imi\Swoole\Server\Type::TCP_SERVER,
-        'host'         => imiGetEnv('SERVER_HOST', '127.0.0.1'),
+        'host'         => \Imi\env('SERVER_HOST', '127.0.0.1'),
         'port'         => 13003,
         'configs'      => [
             'worker_num'    => 1,
@@ -24,22 +24,25 @@
         'dataParser'    => \Imi\Server\DataParser\JsonArrayParser::class,
     ],
     // 子服务器（端口监听）配置
-    'subServers'    =>    [
-        // 指定服务器命名空间
-        'namespace'	=>	'ImiDemo\HttpDemo\MainServer',
-        // 服务器类型(http/WebSocket/TcpServer/UdpServer)
-        'type'		=>	\Imi\Swoole\Server\Type::TCP_SERVER,
-        // 监听的IP地址，可选
-        'host'		=>	'0.0.0.0',
-        // 监听的端口
-        'port'		=>	8080,
-        // 参考 swoole sockType，可选
-        'sockType'	=>	SWOOLE_SOCK_TCP,
-        // 服务器配置，参数用法同\Swoole\Server->set($configs)
-        'configs'	=>	[
+    'subServers' => [
+        // 子服务器别名
+        'alias1'	=>	[
+            // 指定服务器命名空间
+            'namespace'  => 'ImiDemo\HttpDemo\MainServer',
+            // 服务器类型(http/WebSocket/TcpServer/UdpServer)
+            'type'       => \Imi\Swoole\Server\Type::TCP_SERVER,
+            // 监听的IP地址，可选
+            'host'       => '0.0.0.0',
+            // 监听的端口
+            'port'       => 8080,
+            // 参考 swoole sockType，可选
+            'sockType'   => SWOOLE_SOCK_TCP,
+            // 服务器配置，参数用法同\Swoole\Server->set($configs)
+            'configs'    => [
+            ],
+            // 这里配置数据处理器
+            'dataParser' => \Imi\Server\DataParser\JsonArrayParser::class,
         ],
-        // 这里配置数据处理器
-        'dataParser'    => \Imi\Server\DataParser\JsonArrayParser::class,
     ],
 ]
 ```
@@ -55,7 +58,7 @@ return [
         'tcp' => [
             'namespace'   => 'Imi\Workerman\Test\AppServer\TcpServer',
             'type'        => Imi\Workerman\Server\Type::TCP,
-            'host'        => imiGetEnv('SERVER_HOST', '127.0.0.1'),
+            'host'        => \Imi\env('SERVER_HOST', '127.0.0.1'),
             'port'        => 13003,
             'shareWorker' => 'http',
             'configs'     => [

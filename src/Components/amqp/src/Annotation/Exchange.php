@@ -5,14 +5,12 @@ declare(strict_types=1);
 namespace Imi\AMQP\Annotation;
 
 use Imi\Bean\Annotation\Base;
-use Imi\Bean\Annotation\Parser;
 
 /**
  * 交换机.
  *
  * @Annotation
  * @Target({"CLASS"})
- * @Parser("Imi\Bean\Parser\NullParser")
  *
  * @property string   $name       交换机名称
  * @property string   $type       类型；\PhpAmqpLib\Exchange\AMQPExchangeType::常量
@@ -24,7 +22,7 @@ use Imi\Bean\Annotation\Parser;
  * @property array    $arguments  参数
  * @property int|null $ticket     参数
  */
-#[\Attribute(\Attribute::TARGET_CLASS)]
+#[\Attribute(\Attribute::TARGET_CLASS | \Attribute::IS_REPEATABLE)]
 class Exchange extends Base
 {
     public function __construct(?array $__data = null, string $name = '', string $type = \PhpAmqpLib\Exchange\AMQPExchangeType::DIRECT, bool $passive = false, bool $durable = true, bool $autoDelete = false, bool $internal = false, bool $nowait = false, array $arguments = [], ?int $ticket = null)

@@ -201,13 +201,6 @@ return [
 用于直接执行 SQL
 
 ```php
-// 获取新的数据库连接实例
-$db = Db::getNewInstance();
-// 读库
-$db = Db::getNewInstance($poolName, QueryType::READ);
-// 写库
-$db = Db::getNewInstance($poolName, QueryType::WRITE);
-
 // 获取数据库连接实例，每个RequestContext中共用一个
 $db = Db::getInstance();
 // 读库
@@ -215,8 +208,34 @@ $db = Db::getInstance($poolName, QueryType::READ);
 // 写库
 $db = Db::getInstance($poolName, QueryType::WRITE);
 
-// 释放连接，回归连接池
+// ---
+
+// 执行 SQL 并返回受影响的行数
+// public static function exec(string $sql, array $bindValues = [], ?string $poolName = null, int $queryType = QueryType::WRITE): int
+$rows = Db::exec('update tb_xxx set age=111 where id=?', [123]);
+
+// 执行 SQL 返回结果
+// public static function select(string $sql, array $bindValues = [], ?string $poolName = null, int $queryType = QueryType::WRITE): ?IResult
+$result = Db::select('select * from tb_xxx id=?', [123]);
+var_dump($result->getArray()); // 更多用法参考文档
+
+// 预处理
+$stmt = Db::prepare('select * from tb_xxx id=?');
+$stmt->execute([123]);
+var_dump($stmt->fetchAll()); // 更多用法参考文档
+
+// ---
+
+// 获取新的数据库连接实例
+$db = Db::getNewInstance();
+// 读库
+$db = Db::getNewInstance($poolName, QueryType::READ);
+// 写库
+$db = Db::getNewInstance($poolName, QueryType::WRITE);
+// 释放连接，回归连接池，配合 getNewInstance() 使用
 Db::release($db);
+
+// ---
 
 $returnValue = Db::use(function(IDb $db){
     // 操作 $db
@@ -554,12 +573,12 @@ Db::query()->where('field1->uid', '=', 1);
 ```php
 // select * from `tb_test` where (`id` = 1 or (`id` = 2 ) and `title` like '%test%' and `age` > 18 and (`id` = 2 or (`id` = 3 ) ) )
 Db::query()->from('tb_test')->whereEx([
-    'id'	=>	1,
-    'or'	=>	[
-        'id'	=>	2,
+    'id'    =>  1,
+    'or'    =>  [
+        'id'    =>  2,
     ],
-    'title'	=>	['like', '%test%'],
-    'age'	=>	['>', 18],
+    'title' =>  ['like', '%test%'],
+    'age'   =>  ['>', 18],
     'and'   =>  [
         'id'    =>  2,
         'or'    =>  [
@@ -713,12 +732,19 @@ Db::query()->limit(1);
 
 ### 分页查询带扩展字段
 
-查询总记录数、总页数：
+**查询总记录数、总页数：**
 
 ```php
 $page = 1;
 $count = 10;
 $data = Db::query()->from('xxxtable')->paginate($page, $count);
+// 指定转数组后的字段名
+$data = TDb::query()->from('xxxtable')->paginate($page, $count, [
+    'field_list' => 'list',
+    'field_limit' => 'limit',
+    'field_total' => 'total',
+    'field_page_count' => 'page_count',
+]);
 
 $data->getList(); // 列表数据
 $data->getTotal(); // 总记录数
@@ -736,7 +762,7 @@ var_dump(json_encode($data)); // 支持序列化
 ]
 ```
 
-不查询总记录数、总页数：
+**不查询总记录数、总页数：**
 
 ```php
 $page = 1;
@@ -750,6 +776,19 @@ var_dump(json_encode($data)); // 支持序列化
 [
     'list'          => [],
     'limit'         => 10,
+]
+```
+
+**全局设置转数组后的字段名：**
+
+配置`@app.db.paginate.fields`:
+
+```php
+[
+    'list' => 'list',
+    'limit' => 'limit',
+    'total' => 'total',
+    'pageCount' => 'page_count',
 ]
 ```
 
@@ -804,7 +843,7 @@ Db::query()->table('tb_test')->aggregate('test', 'id');
 ```php
 // insert into tb_test(name, age) values('yurun', 666)
 $result = Db::query()->table('tb_test')->insert([
-    'name'	=>	'yurun',
+    'name'  =>	'yurun',
     'age'	=>	666,
 ]);
 

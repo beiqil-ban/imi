@@ -5,14 +5,13 @@ declare(strict_types=1);
 namespace Imi\Model\SoftDelete\Annotation;
 
 use Imi\Bean\Annotation\Base;
-use Imi\Bean\Annotation\Parser;
+use Imi\Config;
 
 /**
  * 软删除.
  *
  * @Annotation
  * @Target("CLASS")
- * @Parser("Imi\Bean\Parser\NullParser")
  *
  * @property string $field   软删除字段名
  * @property mixed  $default 软删除字段的默认值，代表非删除状态
@@ -28,8 +27,12 @@ class SoftDelete extends Base
     /**
      * @param mixed $default
      */
-    public function __construct(?array $__data = null, string $field = 'delete_time', $default = 0)
+    public function __construct(?array $__data = null, string $field = '', $default = 0)
     {
         parent::__construct(...\func_get_args());
+        if ('' === $this->field)
+        {
+            $this->field = Config::get('@app.model.softDelete.fields.deleteTime', 'delete_time');
+        }
     }
 }

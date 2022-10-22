@@ -11,10 +11,11 @@ use Imi\Bean\Annotation\Bean;
 use Imi\Event\Event;
 use Imi\Log\ErrorLog;
 use Imi\Server\Server;
+use Imi\Swoole\SwooleWorker;
+use Imi\Swoole\Util\Coroutine;
 use Imi\Util\Socket\IPEndPoint;
 use Imi\Worker;
 use Imi\WorkermanGateway\Swoole\Server\Business\Task\WorkerTask;
-use Swoole\Coroutine;
 use Throwable;
 use Workerman\Gateway\Config\GatewayWorkerConfig;
 use Workerman\Gateway\Gateway\Contract\IGatewayClient;
@@ -53,7 +54,10 @@ if (\Imi\Util\Imi::checkAppType('swoole'))
         {
             parent::__construct($name, $config);
             Event::on('IMI.MAIN_SERVER.WORKER.START', function () {
-                $this->initGatewayWorker();
+                if (!SwooleWorker::isTask())
+                {
+                    $this->initGatewayWorker();
+                }
             });
         }
 
@@ -77,7 +81,7 @@ if (\Imi\Util\Imi::checkAppType('swoole'))
                 // Gateway Worker
                 $client = new GatewayWorkerClient(($workermanGatewayConfig['workerName'] ?? $this->getName()) . ':' . Worker::getWorkerId(), $config);
                 // 异常处理
-                $client->onException = function (Throwable $th) {
+                $client->onException = static function (Throwable $th) {
                     /** @var ErrorLog $errorLog */
                     $errorLog = App::getBean('ErrorLog');
                     $errorLog->onException($th);

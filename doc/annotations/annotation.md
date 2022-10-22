@@ -30,7 +30,7 @@ use Imi\Bean\Annotation\Parser;
  * @Annotation
  * @Target("METHOD")
  * @Parser("\Imi\Bean\Parser\NullParser")
- * 
+ *
  * // 下面是IDE提示注释
  * @property string $name 随便定义的属性
  * @property int $age 随便定义的属性
@@ -63,7 +63,7 @@ class MyAnnotation extends Base
 
 `@Target`注解，表示当前注解可以写在什么上面。可选：`CLASS`、`METHOD`、`PROPERTY`、`CONST`。支持传多个的写法：`@Target({"CLASS", "METHOD", "PROPERTY", "CONST"})`
 
-`@Parser`注解，指定扫描注解时候的处理器，一般用不着，填写`"\Imi\Bean\Parser\NullParser"`即可
+`@Parser`注解，指定扫描注解时候的处理器，可以不写该注解，或者填写`"\Imi\Bean\Parser\NullParser"`即可
 
 ## 注解使用
 
@@ -75,6 +75,7 @@ namespace ImiApp\Test;
 
 use ImiApp\Annotation\MyAnnotation;
 
+#[Bean(['Test'])]
 class Test
 {
     /**
@@ -132,7 +133,7 @@ class TransactionAop
 
         // 返回返回值，如有必要你也可以自己决定其他返回值
         return $result;
-	}
+    }
 }
 ```
 

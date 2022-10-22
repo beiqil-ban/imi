@@ -37,13 +37,15 @@ Github: <https://github.com/imiphp/imi-snowflake>
 
 配置 `@app.beans`：
 
+> 更多细节可参考[godruoyi/php-snowflake](https://github.com/godruoyi/php-snowflake/blob/master/README-zh_CN.md)组件的文档
+
 ```php
 [
     'Snowflake'   =>  [
         'list'  =>  [
             // 可定义多个配置名称
             'testBasic' =>  [
-                // 'datacenterId'   => null, // 数据中心ID，未空时为0
+                // 'datacenterId'   => null, // 数据中心ID，为空时为0
                 // 'workerId'       => null, // 工作进程ID，为空时取当前进程ID
                 // 'startTimeStamp' => null, // 开始时间戳，单位：毫秒
                 // 'redisPool'      => null, // Redis 连接池名称，为空取默认连接池
@@ -52,6 +54,8 @@ Github: <https://github.com/imiphp/imi-snowflake>
     ],
 ]
 ```
+
+> 注意：当`datacenterId`或`workerId`的设置的值大于`31`时会被替换为一个`0-31`的随机数！！！
 
 ### 生成ID
 

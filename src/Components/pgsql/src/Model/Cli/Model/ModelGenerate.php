@@ -84,20 +84,20 @@ class ModelGenerate extends BaseCommand
         // 表
         $list = $db->query(<<<'SQL'
         SELECT A.oid,
-        	A.relname AS "name",
-        	b.description AS "comment",
-        	A.relkind
+            A.relname AS "name",
+            b.description AS "comment",
+            A.relkind
         FROM
-        	pg_class A
+            pg_class A
         LEFT OUTER JOIN pg_description b ON b.objsubid = 0
-        	AND A.oid = b.objoid
+            AND A.oid = b.objoid
         WHERE
-        	A.relnamespace = ( SELECT oid FROM pg_namespace WHERE nspname = 'public' ) AND A.relkind IN ( 'r', 'v' )
+            A.relnamespace = ( SELECT oid FROM pg_namespace WHERE nspname = 'public' ) AND A.relkind IN ( 'r', 'v' )
         SQL)->fetchAll();
         // model保存路径
         if (null === $basePath)
         {
-            $modelPath = Imi::getNamespacePath($namespace);
+            $modelPath = Imi::getNamespacePath($namespace, true);
         }
         else
         {
@@ -138,7 +138,7 @@ class ModelGenerate extends BaseCommand
             {
                 $configItem = $configData['relation'][$table];
                 $modelNamespace = $configItem['namespace'] ?? $namespace;
-                $path = Imi::getNamespacePath($modelNamespace);
+                $path = Imi::getNamespacePath($modelNamespace, true);
                 if (null === $path)
                 {
                     $this->output->writeln('<error>Namespace</error> <comment>' . $modelNamespace . '</comment> <error>cannot found</error>');
@@ -159,7 +159,7 @@ class ModelGenerate extends BaseCommand
                     if (\in_array($table, $namespaceItem['tables'] ?? []))
                     {
                         $modelNamespace = $namespaceName;
-                        $path = Imi::getNamespacePath($modelNamespace);
+                        $path = Imi::getNamespacePath($modelNamespace, true);
                         if (null === $path)
                         {
                             $this->output->writeln('<error>Namespace</error> <comment>' . $modelNamespace . '</comment> <error>cannot found</error>');
@@ -186,6 +186,11 @@ class ModelGenerate extends BaseCommand
                 $this->output->writeln('Skip <info>' . $table . '</info>');
                 continue;
             }
+            $tableComment = Text::isEmpty($item['comment']) ? $table : $item['comment'];
+            if ('@' === ($tableComment[0] ?? ''))
+            {
+                $tableComment = '@' . $tableComment;
+            }
             $data = [
                 'namespace'     => $modelNamespace,
                 'baseClassName' => $baseClass,
@@ -197,7 +202,7 @@ class ModelGenerate extends BaseCommand
                 'fields'        => [],
                 'entity'        => $entity,
                 'poolName'      => $poolName,
-                'tableComment'  => Text::isEmpty($item['comment']) ? $table : $item['comment'],
+                'tableComment'  => $tableComment,
                 'lengthCheck'   => $lengthCheck,
             ];
             $fields = $query->execute(<<<SQL

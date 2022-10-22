@@ -38,8 +38,10 @@ class TestSoftDelete extends TestSoftDeleteBase
 
 | 属性名称 | 说明 |
 | ------------ | ------------ 
-| field | 软删除字段名，默认为`delete_time` |
+| field | 软删除字段名，默认值见下方说明 |
 | default | 软删除字段的默认值，代表非删除状态，默认为`0` |
+
+`field` 不设置时，默认从配置 `@app.model.softDelete.fields.deleteTime` 读取，如果没有配置，默认是：`delete_time`(imi >= v2.0.16)
 
 ## 使用
 
@@ -61,4 +63,34 @@ public function __generateSoftDeleteValue()
 {
     return time();
 }
+```
+
+### 查询
+
+如果模型引入了软删除机制，使用 `XXXModel::find()`、`XXXModel::query()` 等方式查询时，自动过滤被软删除的数据。
+
+如果需要查询到被软删除的数据，请使用 `XXXModel::findDeleted()`。
+
+如果想要查到所有数据（包括删除和未删除），可以使用 `XXXModel::originQuery()` 获取查询构建器。
+
+### 删除
+
+**软删除：**
+
+```php
+XXXModel::find(1)->delete();
+```
+
+**物理删除：**
+
+```php
+XXXModel::find(1)->hardDelete();
+```
+
+### 恢复记录
+
+恢复被软删除的记录：
+
+```php
+XXXModel::findDeleted(1)-restore();
 ```

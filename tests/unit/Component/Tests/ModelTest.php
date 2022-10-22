@@ -8,12 +8,16 @@ use Imi\Db\Db;
 use Imi\Test\BaseTest;
 use Imi\Test\Component\Model\Article2;
 use Imi\Test\Component\Model\Member;
+use Imi\Test\Component\Model\MemberReferenceProperty;
+use Imi\Test\Component\Model\MemberSerializable;
 use Imi\Test\Component\Model\MemberWithSqlField;
 use Imi\Test\Component\Model\ReferenceGetterTestModel;
+use Imi\Test\Component\Model\TestBug403;
 use Imi\Test\Component\Model\TestJson;
 use Imi\Test\Component\Model\TestJsonNotCamel;
 use Imi\Test\Component\Model\TestList;
 use Imi\Test\Component\Model\TestSoftDelete;
+use Imi\Test\Component\Model\TestWithMember;
 use Imi\Test\Component\Model\UpdateTime;
 
 /**
@@ -403,6 +407,14 @@ class ModelTest extends BaseTest
         // 可以查到
         $this->assertNotNull(TestSoftDelete::find($record->id));
 
+        // join
+        /** @var TestSoftDelete $record2 */
+        $record2 = TestSoftDelete::query()->join('tb_test_soft_delete as b', 'b.id', '=', 'tb_test_soft_delete.id')->where('tb_test_soft_delete.id', '=', $record->id)->select()->get();
+        $this->assertEquals($record->toArray(), $record2->toArray());
+        /** @var TestSoftDelete $record2 */
+        $record2 = TestSoftDelete::query()->table('tb_test_soft_delete', 'a')->join('tb_test_soft_delete as b', 'b.id', '=', 'a.id')->where('a.id', '=', $record->id)->select()->get();
+        $this->assertEquals($record->toArray(), $record2->toArray());
+
         // 物理删除
         $record->hardDelete();
         // 查不到
@@ -532,5 +544,118 @@ class ModelTest extends BaseTest
         {
             $this->assertEquals($record[$k], $v);
         }
+    }
+
+    public function testNotBean(): void
+    {
+        $record = Article2::newInstance();
+        $this->assertEquals(Article2::class, \get_class($record));
+        $record->memberId = 1024;
+        $record->title = __CLASS__;
+        $record->content = __FUNCTION__;
+        $record->save();
+        $this->assertGreaterThan(0, $record->id);
+
+        $record = Article2::find($record->id);
+        $this->assertNotNull($record);
+        $this->assertEquals(Article2::class, \get_class($record));
+    }
+
+    public function testReferenceProperty(): void
+    {
+        $member = Member::newInstance();
+        $member->username = '1';
+        $member->password = '2';
+        $member->insert();
+
+        $record = MemberReferenceProperty::find($member->id);
+        $this->assertEquals($member->id, $record->id);
+        $this->assertEquals($member->id, $record->id2);
+    }
+
+    public function testCustomFields(): void
+    {
+        $member = Member::newInstance();
+        $member->username = '1';
+        $member->password = '2';
+        $member->insert();
+
+        $memberArray = $member->toArray();
+        $memberArray['id2'] = $memberArray['id'];
+
+        /** @var MemberReferenceProperty|null $member1 */
+        $member1 = MemberReferenceProperty::query()->field('tb_member.*')->where('id', '=', $member->id)->select()->get();
+        $this->assertNotNull($member1);
+        $this->assertEquals($memberArray, $member1->toArray());
+
+        /** @var MemberReferenceProperty|null $member1 */
+        $list = MemberReferenceProperty::query()->field('tb_member.*')->where('id', '=', $member->id)->select()->getArray();
+        $this->assertNotNull($member1);
+        $this->assertEquals([$memberArray], Member::convertListToArray($list));
+    }
+
+    /**
+     * @see https://github.com/imiphp/imi/issues/355
+     */
+    public function testBug355(): void
+    {
+        $member = MemberSerializable::newInstance();
+        $member->username = 'testBug355_username';
+        $member->password = 'testBug355_password';
+        $member->insert();
+
+        $record1 = TestWithMember::newInstance();
+        $record1->memberId = $member->id;
+        $record1->insert();
+
+        $record2 = TestWithMember::query()->with(['member'])->where('id', '=', $record1->id)->select()->get();
+        $this->assertNotNull($record2);
+        $this->assertNotNull($record2->member);
+        $data = $record2->toArray();
+        $this->assertFalse(isset($data['memberId']));
+
+        $record2 = TestWithMember::query()->with(['member'])->where('id', '=', $record1->id)->select()->getArray()[0] ?? null;
+        $this->assertNotNull($record2);
+        $this->assertNotNull($record2->member);
+        $data = $record2->toArray();
+        $this->assertFalse(isset($data['memberId']));
+    }
+
+    public function testBug403(): void
+    {
+        $record = TestBug403::newInstance([
+            'json_data' => '[4, 5, 6]',
+        ]);
+        $this->assertEquals([
+            'id' => null,
+        ], $record->convertToArray());
+        // @phpstan-ignore-next-line
+        $this->assertEquals([4, 5, 6], $record->getJsonData()->toArray());
+        $id = $record->insert()->getLastInsertId();
+        $this->assertGreaterThan(0, $id);
+
+        $record = TestBug403::find($id);
+        $this->assertEquals([
+            'id' => $id,
+        ], $record->convertToArray());
+        // @phpstan-ignore-next-line
+        $this->assertEquals([4, 5, 6], $record->getJsonData()->toArray());
+
+        $list = TestBug403::query()->where('id', '=', $id)->select()->getArray();
+        $this->assertEquals([[
+            'id' => $id,
+        ]], TestJson::convertListToArray($list));
+
+        $record = TestBug403::query()->where('id', '=', $id)->select()->get();
+        $this->assertEquals([
+            'id' => $id,
+        ], $record->convertToArray());
+
+        $record = TestBug403::query()->field('id', 'json_data')->where('id', '=', $id)->select()->get();
+        $this->assertEquals([
+            'id'        => $id,
+            'json_data' => [4, 5, 6],
+        ], $record->convertToArray());
+        $this->assertEquals([4, 5, 6], $record->getJsonData()->toArray());
     }
 }

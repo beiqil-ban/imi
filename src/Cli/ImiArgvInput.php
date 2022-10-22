@@ -20,7 +20,7 @@ class ImiArgvInput extends Input
 
     public function __construct(array $argv = null, InputDefinition $definition = null)
     {
-        $argv = $argv ?? $_SERVER['argv'] ?? [];
+        $argv ??= $_SERVER['argv'] ?? [];
 
         // strip the application name
         array_shift($argv);
@@ -330,7 +330,7 @@ class ImiArgvInput extends Input
     /**
      * {@inheritdoc}
      */
-    public function getFirstArgument()
+    public function getFirstArgument(): ?string
     {
         $isOption = false;
         foreach ($this->tokens as $i => $token)
@@ -372,7 +372,7 @@ class ImiArgvInput extends Input
     /**
      * {@inheritdoc}
      */
-    public function hasParameterOption($values, bool $onlyParams = false)
+    public function hasParameterOption($values, bool $onlyParams = false): bool
     {
         $values = (array) $values;
 
@@ -388,7 +388,7 @@ class ImiArgvInput extends Input
                 //   For long options, test for '--option=' at beginning
                 //   For short options, test for '-o' at beginning
                 $leading = 0 === strpos($value, '--') ? $value . '=' : $value;
-                if ($token === $value || '' !== $leading && 0 === strpos($token, $leading))
+                if ($token === $value || '' !== $leading && 0 === strpos($token, (string) $leading))
                 {
                     return true;
                 }

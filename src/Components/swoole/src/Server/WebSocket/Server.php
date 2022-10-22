@@ -22,8 +22,10 @@ use Imi\Swoole\Server\Event\Param\MessageEventParam;
 use Imi\Swoole\Server\Event\Param\RequestEventParam;
 use Imi\Swoole\Server\Event\Param\WorkerStartEventParam;
 use Imi\Swoole\Server\Http\Listener\BeforeRequest;
+use Imi\Swoole\Util\Co\ChannelContainer;
 use Imi\Util\Bit;
 use Imi\Util\ImiPriority;
+use Imi\Worker;
 use Swoole\WebSocket\Server as WebSocketServer;
 
 /**
@@ -111,6 +113,10 @@ class Server extends Base implements ISwooleWebSocketServer
             $this->swoolePort->on('handshake', \is_callable($event) ? $event : function (\Swoole\Http\Request $swooleRequest, \Swoole\Http\Response $swooleResponse) {
                 try
                 {
+                    if (!Worker::isInited())
+                    {
+                        ChannelContainer::pop('workerInit');
+                    }
                     $request = new SwooleRequest($this, $swooleRequest);
                     $response = new SwooleResponse($this, $swooleResponse);
                     RequestContext::create([
@@ -138,15 +144,19 @@ class Server extends Base implements ISwooleWebSocketServer
         }
         else
         {
-            $this->swoolePort->on('handshake', function () {
+            $this->swoolePort->on('handshake', static function () {
             });
         }
 
         if ($event = ($events['message'] ?? true))
         {
-            $this->swoolePort->on('message', \is_callable($event) ? $event : function (WebSocketServer $server, \Swoole\WebSocket\Frame $frame) {
+            $this->swoolePort->on('message', \is_callable($event) ? $event : function (\Swoole\Server $server, \Swoole\WebSocket\Frame $frame) {
                 try
                 {
+                    if (!Worker::isInited())
+                    {
+                        ChannelContainer::pop('workerInit');
+                    }
                     RequestContext::muiltiSet([
                         'server'        => $this,
                         'clientId'      => $frame->fd,
@@ -165,15 +175,19 @@ class Server extends Base implements ISwooleWebSocketServer
         }
         else
         {
-            $this->swoolePort->on('message', function () {
+            $this->swoolePort->on('message', static function () {
             });
         }
 
         if ($event = ($events['close'] ?? true))
         {
-            $this->swoolePort->on('close', \is_callable($event) ? $event : function (WebSocketServer $server, int $fd, int $reactorId) {
+            $this->swoolePort->on('close', \is_callable($event) ? $event : function (\Swoole\Server $server, int $fd, int $reactorId) {
                 try
                 {
+                    if (!Worker::isInited())
+                    {
+                        ChannelContainer::pop('workerInit');
+                    }
                     RequestContext::muiltiSet([
                         'server'        => $this,
                     ]);
@@ -192,7 +206,7 @@ class Server extends Base implements ISwooleWebSocketServer
         }
         else
         {
-            $this->swoolePort->on('close', function () {
+            $this->swoolePort->on('close', static function () {
             });
         }
 
@@ -201,6 +215,10 @@ class Server extends Base implements ISwooleWebSocketServer
             $this->swoolePort->on('request', \is_callable($event) ? $event : function (\Swoole\Http\Request $swooleRequest, \Swoole\Http\Response $swooleResponse) {
                 try
                 {
+                    if (!Worker::isInited())
+                    {
+                        ChannelContainer::pop('workerInit');
+                    }
                     $request = new SwooleRequest($this, $swooleRequest);
                     $response = new SwooleResponse($this, $swooleResponse);
                     RequestContext::muiltiSet([
@@ -228,7 +246,7 @@ class Server extends Base implements ISwooleWebSocketServer
         }
         else
         {
-            $this->swoolePort->on('request', function () {
+            $this->swoolePort->on('request', static function () {
             });
         }
     }

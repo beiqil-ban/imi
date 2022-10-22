@@ -12,27 +12,29 @@
 
 ```php
 return [
-	'beans'	=>	[
-		'HttpErrorHandler'	=>	[
-			// 指定默认处理器
-			'handler'	=>	\Imi\Server\Http\Error\JsonErrorHandler::class,
-		],
-	],
+    'beans'    => [
+        'HttpErrorHandler' => [
+            // 指定默认处理器
+            'handler' => \Imi\Server\Http\Error\JsonErrorHandler::class,
+        ],
+    ],
 ];
 ```
 
-### 处理器参数设置
+### 默认处理器参数设置
 
 ```php
 return [
-	'beans'	=>	[
-		\Imi\Server\Http\Error\JsonErrorHandler::class	=>	[
-			// debug 为 false时也显示错误信息
-			'releaseShow'	=>	false,
-			// 取消继续抛出异常，也不会记录日志
-			'cancelThrow'	=>	true,
-		],
-	],
+    'beans' => [
+    \Imi\Server\Http\Error\JsonErrorHandler::class => [
+            // debug 为 false时也显示错误信息
+            'releaseShow' => false,
+            // 取消继续抛出异常，也不会记录日志
+            'cancelThrow' => true,
+            // 异常时响应的 Http Code，默认 null，不设置
+            'httpCode'    => 500,
+        ],
+    ],
 ];
 ```
 

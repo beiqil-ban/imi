@@ -4,6 +4,7 @@
     "license": "MIT",
     "description": "imi 框架 HTTP API 文档生成器，支持 Swagger！",
     "require": {
+        "php": ">=7.4 <8.2",
         "zircote/swagger-php": "^3.0"
     },
     "require-dev": {
@@ -20,7 +21,10 @@
             "ApiDocApp\\": "example/",
             "Imi\\ApiDoc\\Test\\": "tests/",
             "Imi\\Server\\ApiDoc\\": "src/imi/Server/ApiDoc/"
-        }
+        },
+        "files": [
+            "../../../vendor/autoload.php"
+        ]
     },
     "scripts": {},
     "extra": {
@@ -28,6 +32,14 @@
             "list": [
                 "redis"
             ]
+        }
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true,
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "yurunsoft/ide-helper": true
         }
     }
 }

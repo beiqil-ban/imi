@@ -70,7 +70,7 @@ class Statement extends MysqlBaseStatement implements IMysqlStatement
     /**
      * {@inheritDoc}
      */
-    public function bindColumn($column, &$param, ?int $type = null, ?int $maxLen = null, $driverData = null): bool
+    public function bindColumn($column, &$param, ?int $type = null, ?int $maxLen = 0, $driverData = null): bool
     {
         $this->bindValues[$column] = $param;
 
@@ -80,7 +80,7 @@ class Statement extends MysqlBaseStatement implements IMysqlStatement
     /**
      * {@inheritDoc}
      */
-    public function bindParam($parameter, &$variable, int $dataType = \PDO::PARAM_STR, ?int $length = null, $driverOptions = null): bool
+    public function bindParam($parameter, &$variable, int $dataType = \PDO::PARAM_STR, ?int $length = 0, $driverOptions = null): bool
     {
         $this->bindValues[$parameter] = $variable;
 
@@ -183,7 +183,13 @@ class Statement extends MysqlBaseStatement implements IMysqlStatement
         $result = $statement->execute();
         if (!$result)
         {
-            throw new DbException('SQL query error: [' . $this->errorCode() . '] ' . $this->errorInfo() . ' sql: ' . $this->getSql());
+            $errorCode = $this->errorCode();
+            $errorInfo = $this->errorInfo();
+            if ($this->db->checkCodeIsOffline($errorCode))
+            {
+                $this->db->close();
+            }
+            throw new DbException('SQL query error [' . $errorCode . '] ' . $errorInfo . \PHP_EOL . 'sql: ' . $this->getSql() . \PHP_EOL);
         }
         $this->result = $statement->get_result();
 
@@ -251,7 +257,7 @@ class Statement extends MysqlBaseStatement implements IMysqlStatement
     /**
      * {@inheritDoc}
      */
-    public function fetchObject(string $className = 'stdClass', ?array $ctorArgs = null)
+    public function fetchObject(string $className = \stdClass::class, ?array $ctorArgs = null)
     {
         return $this->result->fetch_object();
     }
@@ -353,8 +359,7 @@ class Statement extends MysqlBaseStatement implements IMysqlStatement
     /**
      * {@inheritDoc}
      */
-    #[\ReturnTypeWillChange]
-    public function valid()
+    public function valid(): bool
     {
         throw new DbException('Not support valid()');
     }

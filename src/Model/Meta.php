@@ -139,8 +139,21 @@ class Meta
      */
     private string $realModelClass = '';
 
+    /**
+     * 模型对象是否作为 bean 类使用.
+     */
+    private bool $bean = false;
+
+    /**
+     * 处理后的序列化字段数组.
+     *
+     * 已包含注解：Serializable、Serializables
+     */
+    private array $parsedSerializableFieldNames = [];
+
     public function __construct(string $modelClass, bool $inherit = false)
     {
+        $id = [];
         $this->inherit = $inherit;
         if ($inherit)
         {
@@ -160,10 +173,10 @@ class Meta
         if ($table)
         {
             $this->dbPoolName = $table->dbPoolName;
-            $this->id = (array) $table->id;
+            $this->id = $id = (array) $table->id;
             $this->setTableName($table->name);
         }
-        $this->firstId = $this->id[0] ?? null;
+        $this->firstId = $id[0] ?? null;
         $fields = $dbFields = [];
         foreach (AnnotationManager::getPropertiesAnnotations($realModelClass, Column::class) as $name => $columns)
         {
@@ -178,8 +191,8 @@ class Meta
             }
             $fields[$name] = $column;
         }
-        $this->relation = ModelRelationManager::hasRelation($realModelClass);
-        if ($this->relation)
+        $this->relation = $relation = ModelRelationManager::hasRelation($realModelClass);
+        if ($relation)
         {
             foreach (ModelRelationManager::getRelationFieldNames($realModelClass) as $name)
             {
@@ -214,11 +227,47 @@ class Meta
                 break;
             }
         }
-        $this->serializables = ModelManager::getSerializables($realModelClass);
-        $this->serializableSets = AnnotationManager::getPropertiesAnnotations($realModelClass, Serializable::class);
+        /** @var Serializables|null $serializables */
+        $serializables = $this->serializables = ModelManager::getSerializables($realModelClass);
+        /** @var Serializable[][] $serializableSets */
+        $serializableSets = $this->serializableSets = AnnotationManager::getPropertiesAnnotations($realModelClass, Serializable::class);
         $this->extractPropertys = ModelManager::getExtractPropertys($realModelClass);
         $this->propertyJsonNotNullMap = AnnotationManager::getPropertiesAnnotations($realModelClass, JsonNotNull::class);
         $this->sqlColumns = AnnotationManager::getPropertiesAnnotations($realModelClass, Sql::class);
+        $this->bean = $entity->bean;
+        $parsedSerializableFieldNames = [];
+        foreach ($serializableFieldNames as $fieldName => $name)
+        {
+            if (isset($serializableSets[$fieldName]))
+            {
+                // 单独属性上的 @Serializable 注解
+                if (!$serializableSets[$fieldName][0]->allow)
+                {
+                    continue;
+                }
+            }
+            elseif ($serializables)
+            {
+                if (\in_array($name, $serializables->fields))
+                {
+                    // 在黑名单中的字段剔除
+                    if ('deny' === $serializables->mode)
+                    {
+                        continue;
+                    }
+                }
+                else
+                {
+                    // 不在白名单中的字段剔除
+                    if ('allow' === $serializables->mode)
+                    {
+                        continue;
+                    }
+                }
+            }
+            $parsedSerializableFieldNames[] = $name;
+        }
+        $this->parsedSerializableFieldNames = $parsedSerializableFieldNames;
     }
 
     /**
@@ -456,5 +505,21 @@ class Meta
         $this->dbPoolName = $dbPoolName;
 
         return $this;
+    }
+
+    /**
+     * 模型对象是否作为 bean 类使用.
+     */
+    public function isBean(): bool
+    {
+        return $this->bean;
+    }
+
+    /**
+     * Get 处理后的序列化字段数组.
+     */
+    public function getParsedSerializableFieldNames(): array
+    {
+        return $this->parsedSerializableFieldNames;
     }
 }

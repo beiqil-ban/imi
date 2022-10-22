@@ -189,23 +189,43 @@ class Server
     /**
      * 获取当前连接数量.
      */
-    public function getConnectionCount(?string $serverName = null): int
+    public static function getConnectionCount(?string $serverName = null): int
     {
         return static::getInstance($serverName)->getConnectionCount();
     }
 
     /**
      * 获取服务器.
+     *
+     * @template T of IServer
+     *
+     * @param class-string<T> $type
+     *
+     * @return T|null
      */
-    public static function getServer(?string $serverName = null): ?IServer
+    public static function getServer(?string $serverName = null, ?string $type = null): ?IServer
     {
         if (null === $serverName)
         {
-            return RequestContext::getServer() ?? ServerManager::getServer('main');
+            $server = RequestContext::getServer();
+            if (!$server)
+            {
+                $servers = ServerManager::getServers();
+
+                $server = reset($servers) ?: null;
+            }
+            if (null !== $type && !$server instanceof $type)
+            {
+                return null;
+            }
+
+            // @phpstan-ignore-next-line
+            return $server;
         }
         else
         {
-            return ServerManager::getServer($serverName);
+            // @phpstan-ignore-next-line
+            return ServerManager::getServer($serverName, $type);
         }
     }
 }

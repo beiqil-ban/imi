@@ -71,7 +71,7 @@ class RedisResource extends BasePoolResource
     {
         $config = $this->config;
         $redis = $this->redis;
-        if (!$redis->isCluster() && $redis->isConnected() && !$redis->select($config['db'] ?? 0))
+        if (!$redis->isCluster() && $redis->isConnected() && ($db = $config['db'] ?? 0) !== $redis->getDBNum() && !$redis->select($db))
         {
             throw new \RedisException($redis->getLastError());
         }
@@ -109,5 +109,15 @@ class RedisResource extends BasePoolResource
                 return false;
             }
         }
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    public function isOpened(): bool
+    {
+        $redis = $this->redis;
+
+        return $redis->isCluster() || $redis->isConnected();
     }
 }

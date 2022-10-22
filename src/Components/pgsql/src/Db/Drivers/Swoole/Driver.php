@@ -10,20 +10,19 @@ use Imi\Config;
 use Imi\Db\Exception\DbException;
 use Imi\Db\Statement\StatementManager;
 use Imi\Db\Transaction\Transaction;
-use Imi\Pgsql\Db\Contract\IPgsqlDb;
 use Imi\Pgsql\Db\Contract\IPgsqlStatement;
 use Imi\Pgsql\Db\PgsqlBase;
 use Imi\Pgsql\Db\Util\SqlUtil;
 use Swoole\Coroutine\PostgreSQL;
 
-if (\extension_loaded('swoole_postgresql'))
+if (class_exists(PostgreSQL::class, false))
 {
     /**
      * Swoole Coroutine PostgreSQL 驱动.
      *
      * @Bean("SwoolePgsqlDriver")
      */
-    class Driver extends PgsqlBase implements IPgsqlDb
+    class Driver extends PgsqlBase
     {
         /**
          * 连接对象
@@ -57,6 +56,8 @@ if (\extension_loaded('swoole_postgresql'))
          */
         protected int $statementIncr = 0;
 
+        protected bool $connected = false;
+
         /**
          * 参数格式：
          * [
@@ -80,7 +81,7 @@ if (\extension_loaded('swoole_postgresql'))
          */
         public function isConnected(): bool
         {
-            return (bool) $this->instance;
+            return $this->connected;
         }
 
         /**
@@ -89,16 +90,26 @@ if (\extension_loaded('swoole_postgresql'))
         public function ping(): bool
         {
             $instance = $this->instance;
+            if (!$instance)
+            {
+                return false;
+            }
+            if ($instance->query('select 1'))
+            {
+                return true;
+            }
+            if ($this->checkCodeIsOffline($this->errorCode()))
+            {
+                $this->close();
+            }
 
-            return $instance && $instance->query('select 1');
+            return false;
         }
 
         /**
          * 构建DNS字符串.
-         *
-         * @return string
          */
-        protected function buildDSN()
+        protected function buildDSN(): string
         {
             $option = $this->option;
             if (isset($option['dsn']))
@@ -128,13 +139,14 @@ if (\extension_loaded('swoole_postgresql'))
             $this->statementIncr = 0;
             $this->instance = $instance = new PostgreSQL();
 
-            $result = $instance->connect($this->buildDSN());
-            if ($result)
+            if ($this->connected = $instance->connect($this->buildDSN()))
             {
                 $this->execInitSqls();
+
+                return true;
             }
 
-            return $result;
+            return false;
         }
 
         /**
@@ -142,6 +154,7 @@ if (\extension_loaded('swoole_postgresql'))
          */
         public function close(): void
         {
+            $this->connected = false;
             StatementManager::clear($this);
             if (null !== $this->lastQueryResult)
             {
@@ -151,12 +164,13 @@ if (\extension_loaded('swoole_postgresql'))
             {
                 $this->instance = null;
             }
+            $this->transaction->init();
         }
 
         /**
          * {@inheritDoc}
          */
-        public function getInstance(): PostgreSQL
+        public function getInstance(): ?PostgreSQL
         {
             return $this->instance;
         }
@@ -168,6 +182,11 @@ if (\extension_loaded('swoole_postgresql'))
         {
             if (!$this->inTransaction() && !$this->instance->query('begin'))
             {
+                if ($this->checkCodeIsOffline($this->errorCode()))
+                {
+                    $this->close();
+                }
+
                 return false;
             }
             $this->exec('SAVEPOINT P' . $this->getTransactionLevels());
@@ -181,7 +200,17 @@ if (\extension_loaded('swoole_postgresql'))
          */
         public function commit(): bool
         {
-            return $this->instance->query('commit') && $this->transaction->commit();
+            if (!$this->instance->query('commit'))
+            {
+                if ($this->checkCodeIsOffline($this->errorCode()))
+                {
+                    $this->close();
+                }
+
+                return false;
+            }
+
+            return $this->transaction->commit();
         }
 
         /**
@@ -201,6 +230,10 @@ if (\extension_loaded('swoole_postgresql'))
             if ($result)
             {
                 $this->transaction->rollBack($levels);
+            }
+            elseif ($this->checkCodeIsOffline($this->errorCode()))
+            {
+                $this->close();
             }
 
             return (bool) $result;
@@ -227,7 +260,21 @@ if (\extension_loaded('swoole_postgresql'))
          */
         public function errorCode()
         {
-            return $this->instance->errCode ?? 0;
+            if ($this->instance)
+            {
+                if ($this->instance->resultDiag)
+                {
+                    return $this->instance->resultDiag['sqlstate'] ?? null;
+                }
+                else
+                {
+                    return '';
+                }
+            }
+            else
+            {
+                return null;
+            }
         }
 
         /**
@@ -253,9 +300,18 @@ if (\extension_loaded('swoole_postgresql'))
         {
             $this->lastSql = $sql;
             $instance = $this->instance;
-            $this->lastQueryResult = $instance->query($sql);
+            $this->lastQueryResult = $lastQueryResult = $instance->query($sql);
+            if (false === $lastQueryResult)
+            {
+                if ($this->checkCodeIsOffline($this->errorCode()))
+                {
+                    $this->close();
+                }
 
-            return $instance->affectedRows($this->lastQueryResult);
+                return 0;
+            }
+
+            return $instance->affectedRows($lastQueryResult);
         }
 
         /**
@@ -328,11 +384,17 @@ if (\extension_loaded('swoole_postgresql'))
             {
                 $this->lastSql = $sql;
                 $parsedSql = SqlUtil::parseSqlWithParams($sql, $sqlParamsMap);
-                $statementName = (string) (++$this->statementIncr);
+                $statementName = 'imi_stmt_' . (++$this->statementIncr);
                 $this->lastQueryResult = $queryResult = $this->instance->prepare($statementName, $parsedSql);
                 if (false === $queryResult)
                 {
-                    throw new DbException('SQL prepare error: ' . $this->errorInfo() . \PHP_EOL . 'sql: ' . $sql . \PHP_EOL);
+                    $errorCode = $this->errorCode();
+                    $errorInfo = $this->errorInfo();
+                    if ($this->checkCodeIsOffline($errorCode))
+                    {
+                        $this->close();
+                    }
+                    throw new DbException('SQL prepare error [' . $errorCode . '] ' . $errorInfo . \PHP_EOL . 'sql: ' . $sql . \PHP_EOL);
                 }
                 $stmt = App::getBean(Statement::class, $this, null, $sql, $statementName, $sqlParamsMap);
                 if ($this->isCacheStatement && !isset($stmtCache))
@@ -353,7 +415,13 @@ if (\extension_loaded('swoole_postgresql'))
             $this->lastQueryResult = $queryResult = $this->instance->query($sql);
             if (false === $queryResult)
             {
-                throw new DbException('SQL query error: [' . $this->errorCode() . '] ' . $this->errorInfo() . \PHP_EOL . 'sql: ' . $sql . \PHP_EOL);
+                $errorCode = $this->errorCode();
+                $errorInfo = $this->errorInfo();
+                if ($this->checkCodeIsOffline($errorCode))
+                {
+                    $this->close();
+                }
+                throw new DbException('SQL query error: [' . $errorCode . '] ' . $errorInfo . \PHP_EOL . 'sql: ' . $sql . \PHP_EOL);
             }
 
             return App::getBean(Statement::class, $this, $queryResult, $sql);

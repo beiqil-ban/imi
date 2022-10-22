@@ -183,8 +183,6 @@ class JWTConfig
 
     /**
      * Get token id.
-     *
-     * @return string
      */
     public function getId(): ?string
     {
@@ -219,6 +217,10 @@ class JWTConfig
         else
         {
             $className = 'Lcobucci\JWT\Signer\\' . $this->signer . '\\' . $this->algo;
+        }
+        if ('Ecdsa' === $this->signer)
+        {
+            return new $className(new \Lcobucci\JWT\Signer\Ecdsa\MultibyteStringConverter());
         }
 
         return new $className();

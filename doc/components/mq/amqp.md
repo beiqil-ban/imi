@@ -46,15 +46,18 @@ Github: <https://github.com/imiphp/imi-amqp>
             'pool'    =>    [
                 'class'        =>    \Imi\AMQP\Pool\AMQPCoroutinePool::class,
                 'config'    =>    [
-                    'maxResources'    =>    10,
-                    'minResources'    =>    1,
+                    'maxResources'      => 10,
+                    'minResources'      => 1,
+                    'heartbeatInterval' => 30, // 连接池心跳时间，推荐设置
                 ],
             ],
             'resource'    =>    [
-                'host'      => '127.0.0.1',
-                'port'      => 5672,
-                'user'      => 'guest',
-                'password'  => 'guest',
+                'host'            => '127.0.0.1',
+                'port'            => 5672,
+                'user'            => 'guest',
+                'password'        => 'guest',
+                'keepalive'       => false, // 截止 Swoole 4.8 还有兼容问题，所以必须设为 false，不影响使用
+                'connectionClass' => \PhpAmqpLib\Connection\AMQPStreamConnection::class,
             ]
         ],
     ]
@@ -88,7 +91,82 @@ Github: <https://github.com/imiphp/imi-amqp>
 ]
 ```
 
-### 连接配置项
+### 队列组件支持
+
+本组件额外实现了 [imiphp/imi-queue](https://github.com/imiphp/imi-queue) 的接口，可以用 Queue 组件的 API 进行调用。
+
+只需要将队列驱动配置为：`KafkaQueueDriver`
+
+配置示例：
+
+```php
+[
+    'beans' =>  [
+        'AutoRunProcessManager' =>  [
+            'processes' =>  [
+                // 加入队列消费进程，非必须，你也可以自己写进程消费
+                'QueueConsumer',
+            ],
+        ],
+        'imiQueue'  => [
+            // 默认队列
+            'default'   => 'QueueTest1',
+            // 队列列表
+            'list'  => [
+                // 队列名称
+                'QueueTest1' => [
+                    // 使用的队列驱动
+                    'driver'        => 'AMQPQueueDriver',
+                    // 消费协程数量
+                    'co'            => 1,
+                    // 消费进程数量；可能会受进程分组影响，以同一组中配置的最多进程数量为准
+                    'process'       => 1,
+                    // 消费循环尝试 pop 的时间间隔，单位：秒（仅使用消费者类时有效）
+                    'timespan'      => 0.1,
+                    // 进程分组名称
+                    'processGroup'  => 'a',
+                    // 自动消费
+                    'autoConsumer'  => true,
+                    // 消费者类
+                    'consumer'      => 'TestConsumer',
+                    // 驱动类所需要的参数数组
+                    'config'        => [
+                        // AMQP 连接池名称
+                        'poolName'      => 'rabbit',
+                        // Redis 连接池名称
+                        'redisPoolName' => 'redis',
+                        // Redis 键名前缀
+                        'redisPrefix'   => 'QueueTest1:',
+                        // 可选配置：
+                        // 支持消息删除功能，依赖 Redis
+                        'supportDelete' => true,
+                        // 支持消费超时队列功能，依赖 Redis，并且自动增加一个队列
+                        'supportTimeout' => true,
+                        // 支持消费失败队列功能，自动增加一个队列
+                        'supportFail' => true,
+                        // 循环尝试 pop 的时间间隔，单位：秒
+                        'timespan'  => 0.03,
+                        // 本地缓存的队列长度。由于 AMQP 不支持主动pop，而是主动推送，所以本地会有缓存队列，这个队列不宜过大。
+                        'queueLength'   => 16,
+                        // 消息类名
+                        'message'   => \Imi\AMQP\Queue\JsonAMQPMessage::class,
+                    ],
+                ],
+            ],
+        ],
+    ]
+]
+```
+
+消费者类写法，与`imi-queue`组件用法一致。
+
+### AMQP 消费发布
+
+这个写法仅 AMQP 有效，其它消息队列不能这么写。
+
+优点是可以完美利用 AMQP 特性，适合需要个性化定制的用户。
+
+#### 连接配置项
 
 | 属性名称 | 说明 |
 |-|-
@@ -103,11 +181,11 @@ Github: <https://github.com/imiphp/imi-amqp>
 | connectionTimeout | 连接超时 |
 | readWriteTimeout | 读写超时 |
 | keepalive | keepalive，默认`false` |
-| heartbeat | 心跳时间，默认`0` |
+| heartbeat | 心跳时间。如果不设置的情况，设置了连接池的心跳，就会设置为该值的 2 倍，否则设为`0` |
 | channelRpcTimeout | 频道 RPC 超时时间，默认`0.0` |
 | sslProtocol | ssl 协议，默认`null` |
 
-### 消息定义
+#### 消息定义
 
 继承 `Imi\AMQP\Message` 类，可在构造方法中对属性修改。
 
@@ -232,7 +310,7 @@ mandatory | mandatory标志位 | `false` |
 immediate | immediate标志位 | `false` |
 ticket | ticket | `null` |
 
-### 发布者定义
+#### 发布者定义
 
 必选注解：`@Publisher`
 
@@ -265,7 +343,7 @@ class TestPublisher extends BasePublisher
 }
 ```
 
-### 发布消息
+#### 发布消息
 
 ```php
 // 实例化构建消息
@@ -275,7 +353,9 @@ $message->setContent('imi niubi');
 
 // 发布消息
 /** @var \ImiApp\AMQP\Test\TestPublisher $testPublisher */
-$testPublisher = App::getBean('TestPublisher');
+$testPublisher = \Imi\RequestContext::getBean('TestPublisher');
+// 请勿使用 App::getBean()、@Inject 等全局单例注入
+// $testPublisher = App::getBean('TestPublisher');
 $testPublisher->publish($message);
 ```
 
@@ -314,9 +394,8 @@ class TestConsumer extends BaseConsumer
      * 消费任务
      *
      * @param \ImiApp\AMQP\Test\TestMessage $message
-     * @return void
      */
-    protected function consume(IMessage $message)
+    protected function consume(IMessage $message): int
     {
         var_dump(__CLASS__, $message->getBody(), get_class($message));
         Redis::set('imi-amqp:consume:1:' . $message->getMemberId(), $message->getBody());
@@ -327,9 +406,9 @@ class TestConsumer extends BaseConsumer
 
 ```
 
-### 消费消息
+#### 消费消息
 
-#### 随服务启动的消费进程
+##### 随服务启动的消费进程
 
 只会启动一个进程，适合量少的场景。适合IO密集型场景。
 
@@ -392,7 +471,7 @@ class TestProcess extends BaseProcess
 ]
 ```
 
-#### 启动进程池消费
+##### 启动进程池消费
 
 适合计算密集型场景、消费量非常多的场景。
 
@@ -400,9 +479,9 @@ class TestProcess extends BaseProcess
 
 启动消费者写法参考上面的即可。
 
-### 注解说明
+#### 注解说明
 
-### @Publisher
+#### @Publisher
 
 发布者注解
 
@@ -412,7 +491,7 @@ class TestProcess extends BaseProcess
 | exchange | 交换机名称 |
 | routingKey | 路由键 |
 
-### @Consumer
+#### @Consumer
 
 消费者注解
 
@@ -427,7 +506,7 @@ class TestProcess extends BaseProcess
 | immediate | immediate标志位 |
 | ticket | ticket |
 
-### @Queue
+#### @Queue
 
 队列注解
 
@@ -443,7 +522,7 @@ class TestProcess extends BaseProcess
 | arguments | 参数 |
 | ticket | ticket |
 
-### @Exchange
+#### @Exchange
 
 交换机注解
 
@@ -459,7 +538,7 @@ class TestProcess extends BaseProcess
 | arguments | 参数 |
 | ticket | ticket |
 
-### @Connection
+#### @Connection
 
 连接注解
 

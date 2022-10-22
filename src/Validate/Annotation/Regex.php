@@ -5,18 +5,16 @@ declare(strict_types=1);
 namespace Imi\Validate\Annotation;
 
 use Imi\Bean\Annotation;
-use Imi\Bean\Annotation\Parser;
 
 /**
  * 正则验证
  *
  * @Annotation
  * @Target({"CLASS", "METHOD", "PROPERTY"})
- * @Parser("\Imi\Bean\Parser\NullParser")
  *
  * @property string $pattern 正则表达式文本
  */
-#[\Attribute(\Attribute::TARGET_CLASS | \Attribute::TARGET_METHOD | \Attribute::TARGET_PROPERTY)]
+#[\Attribute(\Attribute::TARGET_CLASS | \Attribute::TARGET_METHOD | \Attribute::TARGET_PROPERTY | \Attribute::IS_REPEATABLE)]
 class Regex extends Condition
 {
     /**

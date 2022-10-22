@@ -10,6 +10,7 @@ use Imi\Bean\IBean;
 use Imi\Bean\ReflectionContainer;
 use Imi\Event\IEvent;
 use Imi\Event\TEvent;
+use Imi\Model\Annotation\Column;
 use Imi\Model\Annotation\Relation\AutoSelect;
 use Imi\Model\Event\ModelEvents;
 use Imi\Util\Interfaces\IArrayable;
@@ -25,11 +26,6 @@ abstract class BaseModel implements \Iterator, \ArrayAccess, IArrayable, \JsonSe
 {
     use TBeanRealClass;
     use TEvent;
-
-    /**
-     * 序列化后的所有字段属性名列表.
-     */
-    protected array $__fieldNames = [];
 
     /**
      * 驼峰缓存.
@@ -49,6 +45,21 @@ abstract class BaseModel implements \Iterator, \ArrayAccess, IArrayable, \JsonSe
     protected static array $__metas = [];
 
     /**
+     * getter 方法名缓存.
+     */
+    protected static array $__getterCache = [];
+
+    /**
+     * setter 方法名缓存.
+     */
+    protected static array $__setterCache = [];
+
+    /**
+     * 序列化后的所有字段属性名列表.
+     */
+    protected array $__fieldNames = [];
+
+    /**
      * 当前对象 meta 缓存.
      *
      * @var \Imi\Model\Meta
@@ -56,14 +67,9 @@ abstract class BaseModel implements \Iterator, \ArrayAccess, IArrayable, \JsonSe
     protected Meta $__meta;
 
     /**
-     * 类名.
-     */
-    protected string $__className = '';
-
-    /**
      * 真实类名.
      */
-    protected string $__realClass = '';
+    protected ?string $__realClass = null;
 
     /**
      * 记录是否存在.
@@ -72,22 +78,24 @@ abstract class BaseModel implements \Iterator, \ArrayAccess, IArrayable, \JsonSe
 
     /**
      * 序列化字段.
-     *
-     * @var array|null
      */
-    protected $__serializedFields = null;
+    protected ?array $__serializedFields = null;
 
     /**
      * 原始数据.
      */
     protected array $__originData = [];
 
+    /**
+     * 处理后的序列化字段.
+     */
+    protected array $__parsedSerializedFields = [];
+
     public function __construct(array $data = [])
     {
         $this->__meta = $meta = static::__getMeta();
         $this->__fieldNames = $meta->getSerializableFieldNames();
-        $this->__className = $meta->getClassName();
-        $this->__realClass = $meta->getRealModelClass();
+        $this->__parsedSerializedFields = $meta->getParsedSerializableFieldNames();
         if (!$this instanceof IBean)
         {
             $this->__init($data);
@@ -96,17 +104,22 @@ abstract class BaseModel implements \Iterator, \ArrayAccess, IArrayable, \JsonSe
 
     public function __init(array $data = []): void
     {
-        // 初始化前
-        $this->trigger(ModelEvents::BEFORE_INIT, [
-            'model' => $this,
-            'data'  => $data,
-        ], $this, \Imi\Model\Event\Param\InitEventParam::class);
+        $meta = $this->__meta;
+        $isBean = $meta->isBean();
+        if ($isBean)
+        {
+            // 初始化前
+            $this->trigger(ModelEvents::BEFORE_INIT, [
+                'model' => $this,
+                'data'  => $data,
+            ], $this, \Imi\Model\Event\Param\InitEventParam::class);
+        }
 
         $this->__originData = $data;
         if ($data)
         {
-            $fieldAnnotations = $this->__meta->getFields();
-            $dbFieldAnnotations = $this->__meta->getDbFields();
+            $fieldAnnotations = $meta->getFields();
+            $dbFieldAnnotations = $meta->getDbFields();
             foreach ($data as $k => $v)
             {
                 if (isset($fieldAnnotations[$k]))
@@ -115,8 +128,9 @@ abstract class BaseModel implements \Iterator, \ArrayAccess, IArrayable, \JsonSe
                 }
                 elseif (isset($dbFieldAnnotations[$k]))
                 {
-                    $fieldAnnotation = $dbFieldAnnotations[$k]['column'];
-                    $k = $dbFieldAnnotations[$k]['propertyName'];
+                    $item = $dbFieldAnnotations[$k];
+                    $fieldAnnotation = $item['column'];
+                    $k = $item['propertyName'];
                 }
                 else
                 {
@@ -131,6 +145,10 @@ abstract class BaseModel implements \Iterator, \ArrayAccess, IArrayable, \JsonSe
                             if (\is_array($value))
                             {
                                 $v = new LazyArrayObject($value);
+                            }
+                            elseif (\JSON_ERROR_NONE === json_last_error())
+                            {
+                                $v = $value;
                             }
                             break;
                         case 'list':
@@ -149,11 +167,14 @@ abstract class BaseModel implements \Iterator, \ArrayAccess, IArrayable, \JsonSe
             }
         }
 
-        // 初始化后
-        $this->trigger(ModelEvents::AFTER_INIT, [
-            'model' => $this,
-            'data'  => $data,
-        ], $this, \Imi\Model\Event\Param\InitEventParam::class);
+        if ($isBean)
+        {
+            // 初始化后
+            $this->trigger(ModelEvents::AFTER_INIT, [
+                'model' => $this,
+                'data'  => $data,
+            ], $this, \Imi\Model\Event\Param\InitEventParam::class);
+        }
     }
 
     /**
@@ -165,8 +186,15 @@ abstract class BaseModel implements \Iterator, \ArrayAccess, IArrayable, \JsonSe
      */
     public static function newInstance(...$args): object
     {
-        // @phpstan-ignore-next-line
-        return BeanFactory::newInstance(static::class, ...$args);
+        if (static::__getMeta()->isBean())
+        {
+            // @phpstan-ignore-next-line
+            return BeanFactory::newInstance(static::class, ...$args);
+        }
+        else
+        {
+            return new static(...$args);
+        }
     }
 
     /**
@@ -185,12 +213,44 @@ abstract class BaseModel implements \Iterator, \ArrayAccess, IArrayable, \JsonSe
     /**
      * @param int|string $offset
      */
-    #[\ReturnTypeWillChange]
     public function offsetExists($offset): bool
     {
-        $methodName = 'get' . ucfirst($this->__getCamelName($offset));
+        if (isset($this->__originData[$offset]))
+        {
+            return true;
+        }
+        $meta = $this->__meta;
+        /** @var Column|null $column */
+        $column = $meta->getFields()[$offset] ?? null;
+        if ($column && '' !== $column->reference)
+        {
+            return $this->offsetExists($column->reference);
+        }
+        $class = ($this->__realClass ??= $meta->getRealModelClass());
+        if (isset(self::$__getterCache[$class][$offset]))
+        {
+            $methodName = self::$__getterCache[$class][$offset];
+            if (false === $methodName)
+            {
+                return false;
+            }
+        }
+        else
+        {
+            $methodName = 'get' . ucfirst($this->__getCamelName((string) $offset));
+            if (method_exists($this, $methodName))
+            {
+                self::$__getterCache[$class][$offset] = $methodName;
+            }
+            else
+            {
+                self::$__getterCache[$class][$offset] = false;
 
-        return isset($this->__originData[$offset]) || (method_exists($this, $methodName) && null !== $this->$methodName());
+                return false;
+            }
+        }
+
+        return null !== $this->$methodName();
     }
 
     /**
@@ -201,17 +261,45 @@ abstract class BaseModel implements \Iterator, \ArrayAccess, IArrayable, \JsonSe
     #[\ReturnTypeWillChange]
     public function &offsetGet($offset)
     {
-        $methodName = 'get' . ucfirst($this->__getCamelName($offset));
-        $realClass = $this->__realClass;
-        if (method_exists($this, $methodName))
+        $meta = $this->__meta;
+        /** @var Column|null $column */
+        $column = $meta->getFields()[$offset] ?? null;
+        if ($column && '' !== $column->reference)
+        {
+            return $this[$column->reference];
+        }
+        $getterExists = true;
+        $class = ($this->__realClass ??= $meta->getRealModelClass());
+        if (isset(self::$__getterCache[$class][$offset]))
+        {
+            $methodName = self::$__getterCache[$class][$offset];
+            if (false === $methodName)
+            {
+                $getterExists = false;
+            }
+        }
+        else
+        {
+            $methodName = 'get' . ucfirst($this->__getCamelName((string) $offset));
+            if (method_exists($this, $methodName))
+            {
+                self::$__getterCache[$class][$offset] = $methodName;
+            }
+            else
+            {
+                self::$__getterCache[$class][$offset] = false;
+                $getterExists = false;
+            }
+        }
+        if ($getterExists)
         {
             $__methodReference = &self::$__methodReference;
-            if (!isset($__methodReference[$realClass][$methodName]))
+            if (!isset($__methodReference[$class][$methodName]))
             {
                 $refMethod = ReflectionContainer::getMethodReflection(static::class, $methodName);
-                $__methodReference[$realClass][$methodName] = $refMethod->returnsReference();
+                $__methodReference[$class][$methodName] = $refMethod->returnsReference();
             }
-            if ($__methodReference[$realClass][$methodName])
+            if ($__methodReference[$class][$methodName])
             {
                 return $this->$methodName();
             }
@@ -236,37 +324,55 @@ abstract class BaseModel implements \Iterator, \ArrayAccess, IArrayable, \JsonSe
      * @param int|string $offset
      * @param mixed      $value
      */
-    #[\ReturnTypeWillChange]
     public function offsetSet($offset, $value): void
     {
         $meta = $this->__meta;
         $fields = $meta->getFields();
-        $camelName = $this->__getCamelName($offset);
-        // 数据库bit类型字段处理
-        if (isset($fields[$offset]))
+        /** @var Column|null $column */
+        $column = $fields[$offset] ?? null;
+        if ($column && '' !== $column->reference)
         {
-            $column = $fields[$offset];
+            $this[$column->reference] = $value;
+
+            return;
         }
-        elseif (isset($fields[$camelName]))
+        // 数据库bit类型字段处理
+        if (!$column && isset($fields[$camelName = $this->__getCamelName((string) $offset)]))
         {
             $column = $fields[$camelName];
         }
-        else
-        {
-            $column = null;
-        }
-        if (null !== $column && 'bit' === $column->type)
+        if ($column && 'bit' === $column->type)
         {
             $value = (1 == $value || \chr(1) === $value);
         }
 
-        $methodName = 'set' . ucfirst($camelName);
-        if (!method_exists($this, $methodName))
+        $class = ($this->__realClass ??= $this->__meta->getRealModelClass());
+        if (isset(self::$__setterCache[$class][$offset]))
         {
-            $this->__originData[$offset] = $value;
+            $methodName = self::$__setterCache[$class][$offset];
+            if (false === $methodName)
+            {
+                $this->__originData[$offset] = $value;
 
-            return;
+                return;
+            }
         }
+        else
+        {
+            $methodName = 'set' . ucfirst($this->__getCamelName((string) $offset));
+            if (method_exists($this, $methodName))
+            {
+                self::$__setterCache[$class][$offset] = $methodName;
+            }
+            else
+            {
+                self::$__setterCache[$class][$offset] = false;
+                $this->__originData[$offset] = $value;
+
+                return;
+            }
+        }
+
         $this->$methodName($value);
 
         if (\is_array($value) || \is_object($value))
@@ -276,7 +382,7 @@ abstract class BaseModel implements \Iterator, \ArrayAccess, IArrayable, \JsonSe
             if (
                 (($name = $offset) && isset($extractProperties[$name]))
                 || (($name = Text::toUnderScoreCase($offset)) && isset($extractProperties[$name]))
-                || (($name = $this->__getCamelName($offset)) && isset($extractProperties[$name]))
+                || (($name = $this->__getCamelName((string) $offset)) && isset($extractProperties[$name]))
             ) {
                 $this->__parseExtractProperty($name, $extractProperties[$name]);
             }
@@ -289,6 +395,16 @@ abstract class BaseModel implements \Iterator, \ArrayAccess, IArrayable, \JsonSe
     #[\ReturnTypeWillChange]
     public function offsetUnset($offset): void
     {
+        $meta = $this->__meta;
+        $fields = $meta->getFields();
+        /** @var Column|null $column */
+        $column = $fields[$offset] ?? null;
+        if ($column && '' !== $column->reference)
+        {
+            unset($this[$column->reference]);
+
+            return;
+        }
         if (isset($this->__fieldNames[$offset]))
         {
             unset($this->__fieldNames[$offset]);
@@ -345,7 +461,7 @@ abstract class BaseModel implements \Iterator, \ArrayAccess, IArrayable, \JsonSe
         if (null === $serializedFields)
         {
             $meta = $this->__meta;
-            $realClass = $this->__realClass;
+            $realClass = ($this->__realClass ??= $meta->getRealModelClass());
             if ($meta->hasRelation())
             {
                 $relationFieldNames = ModelRelationManager::getRelationFieldNames($this);
@@ -354,17 +470,13 @@ abstract class BaseModel implements \Iterator, \ArrayAccess, IArrayable, \JsonSe
             {
                 $relationFieldNames = [];
             }
-            // 禁止序列化支持
-            $serializables = $meta->getSerializables();
-            $serializableSets = $meta->getSerializableSets();
             // JsonNotNull 注解支持
-            $propertyJsonNotNullMap = $meta->getPropertyJsonNotNullMap();
-            foreach ($this->__fieldNames as $name)
+            foreach ($this->__parsedSerializedFields as $name)
             {
                 $value = $this[$name];
                 if (null === $value)
                 {
-                    if (isset($propertyJsonNotNullMap[$name]))
+                    if (isset(($propertyJsonNotNullMap ??= $meta->getPropertyJsonNotNullMap())[$name]))
                     {
                         continue;
                     }
@@ -378,41 +490,11 @@ abstract class BaseModel implements \Iterator, \ArrayAccess, IArrayable, \JsonSe
                         }
                     }
                 }
-                if (isset($serializableSets[$name]))
-                {
-                    // 单独属性上的 @Serializable 注解
-                    if (!$serializableSets[$name][0]->allow)
-                    {
-                        continue;
-                    }
-                }
-                elseif ($serializables)
-                {
-                    if (\in_array($name, $serializables->fields))
-                    {
-                        // 在黑名单中的字段剔除
-                        if ('deny' === $serializables->mode)
-                        {
-                            continue;
-                        }
-                    }
-                    else
-                    {
-                        // 不在白名单中的字段剔除
-                        if ('allow' === $serializables->mode)
-                        {
-                            continue;
-                        }
-                    }
-                }
                 $result[$name] = $value;
             }
-
-            return $result;
         }
         else
         {
-            $resultArray = [];
             $__fieldNames = $this->__fieldNames;
             foreach ($serializedFields as $fieldName)
             {
@@ -424,11 +506,11 @@ abstract class BaseModel implements \Iterator, \ArrayAccess, IArrayable, \JsonSe
                 {
                     $name = $__fieldNames[$fieldName] ?? $fieldName;
                 }
-                $resultArray[$name] = $this[$name] ?? null;
+                $result[$name] = $this[$name] ?? null;
             }
-
-            return $resultArray;
         }
+
+        return $result;
     }
 
     /**
@@ -507,8 +589,7 @@ abstract class BaseModel implements \Iterator, \ArrayAccess, IArrayable, \JsonSe
     /**
      * {@inheritDoc}
      */
-    #[\ReturnTypeWillChange]
-    public function valid()
+    public function valid(): bool
     {
         return false !== current($this->__fieldNames);
     }

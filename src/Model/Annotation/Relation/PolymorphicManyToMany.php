@@ -4,14 +4,11 @@ declare(strict_types=1);
 
 namespace Imi\Model\Annotation\Relation;
 
-use Imi\Bean\Annotation\Parser;
-
 /**
  * 多态多对多关联.
  *
  * @Annotation
  * @Target("PROPERTY")
- * @Parser("Imi\Bean\Parser\NullParser")
  *
  * @property string        $type       右表多态类型字段名
  * @property mixed         $typeValue  右表多态类型字段值
@@ -19,7 +16,7 @@ use Imi\Bean\Annotation\Parser;
  * @property bool          $with       关联预加载查询
  * @property string[]|null $withFields 设置结果模型的序列化字段
  */
-#[\Attribute(\Attribute::TARGET_PROPERTY)]
+#[\Attribute(\Attribute::TARGET_PROPERTY | \Attribute::IS_REPEATABLE)]
 class PolymorphicManyToMany extends ManyToMany
 {
     /**

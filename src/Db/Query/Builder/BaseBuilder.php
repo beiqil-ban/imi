@@ -22,10 +22,8 @@ abstract class BaseBuilder implements IBuilder
      * 生成SQL语句.
      *
      * @param mixed $args
-     *
-     * @return string
      */
-    public static function buildSql(IQuery $query, ...$args)
+    public static function buildSql(IQuery $query, ...$args): string
     {
         $builder = new static($query);
 
@@ -108,8 +106,13 @@ abstract class BaseBuilder implements IBuilder
         $query = $this->query;
         foreach ($where as $item)
         {
+            $sql = $item->toStringWithoutLogic($query);
+            if ('' === $sql)
+            {
+                continue;
+            }
             $result[] = $item->getLogicalOperator();
-            $result[] = $item->toStringWithoutLogic($query);
+            $result[] = $sql;
             $binds = $item->getBinds();
             if ($binds)
             {
@@ -117,21 +120,20 @@ abstract class BaseBuilder implements IBuilder
             }
         }
         unset($result[0]);
-        $result = implode(' ', $result);
-        if ('' !== $result)
+        if ($result)
         {
-            $result = ' where ' . $result;
+            return ' where ' . implode(' ', $result);
         }
-
-        return $result;
+        else
+        {
+            return '';
+        }
     }
 
     /**
      * limit.
-     *
-     * @return string
      */
-    protected function parseLimit(?int $offset, ?int $limit)
+    protected function parseLimit(?int $offset, ?int $limit): string
     {
         if (null === $limit)
         {

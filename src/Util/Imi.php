@@ -4,17 +4,19 @@ declare(strict_types=1);
 
 namespace Imi\Util;
 
-use function getenv;
 use Imi\App;
 use Imi\Bean\Annotation;
 use Imi\Bean\BeanManager;
 use Imi\Bean\BeanProxy;
 use Imi\Bean\ReflectionContainer;
 use Imi\Config;
+use function Imi\env;
 use Imi\Event\Event;
 use Imi\Main\Helper;
 use Imi\Util\Process\ProcessAppContexts;
-use function shell_exec;
+use function php_uname;
+use function round;
+use function sprintf;
 use function str_contains;
 use function strrpos;
 use function substr;
@@ -174,10 +176,7 @@ class Imi
      */
     public static function parseDotRule(string $rule): array
     {
-        $result = preg_split('#(?<!\\\)\.#', $rule);
-        $result = str_replace('\.', '.', $result);
-
-        return $result;
+        return str_replace('\.', '.', preg_split('#(?<!\\\)\.#', $rule));
     }
 
     /**
@@ -211,7 +210,7 @@ class Imi
     /**
      * 根据命名空间获取真实路径，返回null则为获取失败.
      */
-    public static function getNamespacePath(string $namespace): ?string
+    public static function getNamespacePath(string $namespace, bool $returnFirst = false): ?string
     {
         if ('\\' !== ($namespace[-1] ?? ''))
         {
@@ -229,7 +228,7 @@ class Imi
                     $len = \strlen($keyNamespace);
                     if (substr($namespace, 0, $len) === $keyNamespace)
                     {
-                        if (isset($paths[1]))
+                        if (isset($paths[1]) && !$returnFirst)
                         {
                             return null;
                         }
@@ -397,7 +396,6 @@ class Imi
             App::get(ProcessAppContexts::SCRIPT_NAME),
             $commandName,
         ];
-        // $cmd = '"' . \PHP_BINARY . '" "' . App::get(ProcessAppContexts::SCRIPT_NAME) . '" ' . $commandName;
         $options['app-namespace'] ??= App::getNamespace();
         if ($arguments)
         {
@@ -424,8 +422,6 @@ class Imi
 
     /**
      * 运行时目录路径.
-     *
-     * @return string
      */
     private static string $runtimePath = '';
 
@@ -579,17 +575,25 @@ class Imi
         $tmpPath = &self::$tmpPath;
         if ('' === $tmpPath)
         {
-            if (is_dir('/run/shm'))
+            if (is_dir('/run/shm') && is_writable('/run/shm'))
             {
                 $tmpPath = '/run/shm';
             }
-            elseif (is_dir('/tmp'))
+            elseif (is_dir('/tmp') && is_writable('/tmp'))
             {
                 $tmpPath = '/tmp';
             }
             else
             {
                 $tmpPath = sys_get_temp_dir();
+                if (!is_writable($tmpPath))
+                {
+                    $tmpPath = self::getCurrentModeRuntimePath('tmp');
+                    if (!is_dir($tmpPath))
+                    {
+                        mkdir($tmpPath, 0755, true);
+                    }
+                }
             }
         }
         if (null === $fileName)
@@ -627,8 +631,8 @@ class Imi
     public static function isWSL(): bool
     {
         return is_file('/proc/sys/fs/binfmt_misc/WSLInterop')
-            || (getenv('WSLEMV') || getenv('WSL_INTEROP') || getenv('WSL_DISTRO_NAME'))
-            || str_contains(shell_exec('uname -a') ?: '', 'WSL');
+            || (env('WSLEMV', false) || env('WSL_INTEROP', false) || env('WSL_DISTRO_NAME', false))
+            || str_contains(php_uname(), 'WSL');
     }
 
     /**
@@ -636,7 +640,20 @@ class Imi
      */
     public static function getLinuxVersion(): string
     {
-        if (preg_match_all('/^((NAME="?(?<name>.+)"?)|VERSION="?(?<version>.+)"?)/im', shell_exec('cat /etc/*-release'), $matches) <= 0)
+        $matches = [];
+        $files = glob('/etc/*-release');
+        if (false === $files)
+        {
+            return '';
+        }
+        foreach ($files as $file)
+        {
+            if (preg_match_all('/^((NAME="?(?<name>.+)"?)|VERSION="?(?<version>.+)"?)/im', file_get_contents($file), $matches))
+            {
+                break;
+            }
+        }
+        if (empty($matches))
         {
             return '';
         }
@@ -744,5 +761,49 @@ class Imi
     public static function checkAppType(string $appType): bool
     {
         return App::isInited() && $appType === App::getApp()->getType();
+    }
+
+    /**
+     * 格式化可读字节单位.
+     */
+    public static function formatByte(float $byte, int $dec = 2, bool $unit = true): string
+    {
+        $units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
+        $count = \count($units) - 1;
+        $pos = 0;
+
+        while ($byte >= 1024 && $pos < $count)
+        {
+            $byte /= 1024;
+            ++$pos;
+        }
+
+        $result = sprintf("%.{$dec}f", round($byte, $dec));
+
+        if ($unit)
+        {
+            return "{$result} {$units[$pos]}";
+        }
+        else
+        {
+            return $result;
+        }
+    }
+
+    public static function getOpcacheInfo(): string
+    {
+        if (\function_exists('\opcache_get_status'))
+        {
+            $status = opcache_get_status(false);
+            $enabled = $status && $status['opcache_enabled'];
+            $jit = $status && isset($status['jit']) ? (', JIT ' . ini_get('opcache.jit')) : '';
+            $opcacheStatus = ($enabled ? 'On' : 'Off') . $jit;
+        }
+        else
+        {
+            $opcacheStatus = 'Not';
+        }
+
+        return $opcacheStatus;
     }
 }

@@ -8,6 +8,7 @@ use Imi\Bean\Annotation\AnnotationManager;
 use Imi\Bean\BeanFactory;
 use Imi\Db\Query\Interfaces\IQuery;
 use Imi\Db\Query\Interfaces\IResult;
+use Imi\Db\Query\Where\Where;
 use Imi\Event\Event;
 use Imi\Model\Contract\IModelQuery;
 use Imi\Model\Event\ModelEvents;
@@ -61,14 +62,32 @@ trait TSoftDelete
     {
         /** @var IModelQuery $query */
         $query = parent::query($poolName, $queryType, $queryClass);
-        $softDeleteAnnotation = self::__getSoftDeleteAnnotation();
 
-        if (null === $softDeleteAnnotation->default)
-        {
-            return $query->whereIsNull($softDeleteAnnotation->field);
-        }
+        return $query->whereBrackets(function () use ($query) {
+            $softDeleteAnnotation = self::__getSoftDeleteAnnotation();
+            $table = $query->getOption()->table;
+            if (null === ($alias = $table->getAlias()))
+            {
+                if (null === ($database = $table->getDatabase()))
+                {
+                    $fieldTableName = $table->getTable();
+                }
+                else
+                {
+                    $fieldTableName = $database . '.' . $table->getTable();
+                }
+            }
+            else
+            {
+                $fieldTableName = $alias;
+            }
+            if (null === $softDeleteAnnotation->default)
+            {
+                return new Where($fieldTableName . '.' . $softDeleteAnnotation->field, 'is', null);
+            }
 
-        return $query->where($softDeleteAnnotation->field, '=', $softDeleteAnnotation->default);
+            return new Where($fieldTableName . '.' . $softDeleteAnnotation->field, '=', $softDeleteAnnotation->default);
+        });
     }
 
     /**
@@ -77,7 +96,7 @@ trait TSoftDelete
      * @param string|null $poolName  连接池名，为null则取默认
      * @param int|null    $queryType 查询类型；Imi\Db\Query\QueryType::READ/WRITE
      */
-    public static function originQuery(?string $poolName = null, ?int $queryType = null, string $queryClass = self::DEFAULT_QUERY_CLASS): IQuery
+    public static function originQuery(?string $poolName = null, ?int $queryType = null, string $queryClass = self::DEFAULT_QUERY_CLASS): IModelQuery
     {
         return parent::query($poolName, $queryType, $queryClass);
     }
@@ -90,14 +109,18 @@ trait TSoftDelete
         $softDeleteAnnotation = self::__getSoftDeleteAnnotation();
         /** @var IQuery $query */
         $query = static::dbQuery();
-
-        // 删除前
-        $this->trigger(ModelEvents::BEFORE_DELETE, [
-            'model' => $this,
-            'query' => $query,
-        ], $this, \Imi\Model\Event\Param\BeforeDeleteEventParam::class);
-
         $meta = $this->__meta;
+        $isBean = $meta->isBean();
+
+        if ($isBean)
+        {
+            // 删除前
+            $this->trigger(ModelEvents::BEFORE_DELETE, [
+                'model' => $this,
+                'query' => $query,
+            ], $this, \Imi\Model\Event\Param\BeforeDeleteEventParam::class);
+        }
+
         $id = $meta->getId();
         if ($id)
         {
@@ -112,11 +135,14 @@ trait TSoftDelete
             $fieldName => $fieldVlaue,
         ]);
 
-        // 删除后
-        $this->trigger(ModelEvents::AFTER_DELETE, [
-            'model'  => $this,
-            'result' => $result,
-        ], $this, \Imi\Model\Event\Param\AfterDeleteEventParam::class);
+        if ($isBean)
+        {
+            // 删除后
+            $this->trigger(ModelEvents::AFTER_DELETE, [
+                'model'  => $this,
+                'result' => $result,
+            ], $this, \Imi\Model\Event\Param\AfterDeleteEventParam::class);
+        }
 
         if ($meta->hasRelation())
         {
@@ -134,7 +160,7 @@ trait TSoftDelete
      */
     public function hardDelete(): IResult
     {
-        $this->one(ModelEvents::BEFORE_DELETE, function (BeforeDeleteEventParam $e) {
+        $this->one(ModelEvents::BEFORE_DELETE, static function (BeforeDeleteEventParam $e) {
             $e->query->getOption()->where = [];
         });
 
@@ -173,7 +199,7 @@ trait TSoftDelete
                     $bindValues[':' . $k] = $v;
                 }
                 $bindValues[':' . $softDeleteAnnotation->field] = $softDeleteAnnotation->default;
-                $query = $query->alias($realClassName . ':findDeleted:pk1:' . md5(implode(',', $keys)), function (IQuery $query) use ($keys, $softDeleteAnnotation) {
+                $query = $query->alias($realClassName . ':findDeleted:pk1:' . md5(implode(',', $keys)), static function (IModelQuery $query) use ($keys, $softDeleteAnnotation) {
                     foreach ($keys as $name)
                     {
                         $query->whereRaw($query->fieldQuote($name) . '=:' . $name);
@@ -200,7 +226,7 @@ trait TSoftDelete
                     }
                 }
                 $bindValues[':' . $softDeleteAnnotation->field] = $softDeleteAnnotation->default;
-                $query = $query->alias($realClassName . ':findDeleted:pk2:' . md5(implode(',', $keys)), function (IQuery $query) use ($keys, $softDeleteAnnotation) {
+                $query = $query->alias($realClassName . ':findDeleted:pk2:' . md5(implode(',', $keys)), static function (IModelQuery $query) use ($keys, $softDeleteAnnotation) {
                     if ($keys)
                     {
                         foreach ($keys as $name)
@@ -247,8 +273,9 @@ trait TSoftDelete
                 $query->where($idName, '=', $this[$idName]);
             }
         }
+        $fieldName = $softDeleteAnnotation->field;
         $result = $query->update([
-            $softDeleteAnnotation->field => $softDeleteAnnotation->default,
+            $fieldName => ($this[$fieldName] = $softDeleteAnnotation->default),
         ]);
         $this->__recordExists = true;
 

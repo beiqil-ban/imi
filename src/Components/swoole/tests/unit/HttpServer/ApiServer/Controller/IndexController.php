@@ -22,7 +22,7 @@ use Imi\Util\Stream\MemoryStream;
 use Swoole\Coroutine;
 
 /**
- * @Controller(prefix="/", singleton=true)
+ * @Controller(prefix="/")
  */
 class IndexController extends HttpController
 {
@@ -412,5 +412,38 @@ class IndexController extends HttpController
      */
     public function duplicated2(): void
     {
+    }
+
+    /**
+     * 忽略大小写.
+     *
+     * @Action
+     * @Route(ignoreCase=true)
+     */
+    public function ignoreCase(): void
+    {
+    }
+
+    /**
+     * 测试 domain.
+     *
+     * @Action
+     * @Route(domain="localhost")
+     */
+    public function domain(): void
+    {
+    }
+
+    /**
+     * 测试 domain2.
+     *
+     * @Action
+     * @Route(domain="local{value}")
+     */
+    public function domain2(string $value): array
+    {
+        return [
+            'value' => $value,
+        ];
     }
 }

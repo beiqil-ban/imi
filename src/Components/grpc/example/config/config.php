@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use function Imi\env;
 use Imi\Grpc\Client\GrpcClient;
 
 return [
@@ -23,6 +24,11 @@ return [
     'components'    => [
         'Swoole' => 'Imi\Swoole',
         'Grpc'   => 'Imi\Grpc',
+    ],
+
+    // 忽略目录
+    'ignorePaths' => [
+        \dirname(__DIR__) . \DIRECTORY_SEPARATOR . 'grpc',
     ],
 
     // 主服务器配置
@@ -57,7 +63,7 @@ return [
                 ],
             ],
             'resource'    => [
-                'host'      => imiGetEnv('REDIS_SERVER_HOST', '127.0.0.1'),
+                'host'      => env('REDIS_SERVER_HOST', '127.0.0.1'),
                 'port'      => 6379,
                 'password'  => null,
             ],

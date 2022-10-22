@@ -17,7 +17,7 @@ class HproseSocketClient implements IRpcClient
     /**
      * Client.
      */
-    protected ?Client $client;
+    protected ?Client $client = null;
 
     /**
      * 配置.
@@ -57,6 +57,14 @@ class HproseSocketClient implements IRpcClient
      * {@inheritDoc}
      */
     public function isConnected(): bool
+    {
+        return true;
+    }
+
+    /**
+     * 实时检查是否已连接.
+     */
+    public function checkConnected(): bool
     {
         return true;
     }

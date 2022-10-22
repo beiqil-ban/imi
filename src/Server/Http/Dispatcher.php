@@ -5,12 +5,16 @@ declare(strict_types=1);
 namespace Imi\Server\Http;
 
 use Imi\Bean\Annotation\Bean;
+use Imi\RequestContext;
+use Imi\Server\Annotation\ServerInject;
 use Imi\Server\Http\Message\Contract\IHttpRequest;
 use Imi\Server\Http\Message\Contract\IHttpResponse;
 use Imi\Server\Http\Message\Response;
+use Imi\Server\Http\Middleware\ActionMiddleware;
+use Imi\Server\Http\Middleware\RouteMiddleware;
 
 /**
- * @Bean("HttpDispatcher")
+ * @Bean(name="HttpDispatcher", recursion=false)
  */
 class Dispatcher
 {
@@ -22,6 +26,21 @@ class Dispatcher
     protected array $middlewares = [];
 
     /**
+     * 是否启用中间件.
+     */
+    protected bool $middleware = true;
+
+    /**
+     * @ServerInject("RouteMiddleware")
+     */
+    protected RouteMiddleware $routeMiddleware;
+
+    /**
+     * @ServerInject("ActionMiddleware")
+     */
+    protected ActionMiddleware $actionMiddleware;
+
+    /**
      * 最终使用的中间件列表.
      */
     private array $finalMiddlewares = [];
@@ -31,9 +50,26 @@ class Dispatcher
      */
     public function dispatch(IHttpRequest $request): IHttpResponse
     {
-        $requestHandler = new RequestHandler($this->getMiddlewares());
-        /** @var Response $response */
-        $response = $requestHandler->handle($request);
+        if ($this->middleware)
+        {
+            $requestHandler = new RequestHandler($this->getMiddlewares());
+            /** @var Response $response */
+            $response = $requestHandler->handle($request);
+        }
+        else
+        {
+            $context = RequestContext::getContext();
+            $response = $context['response'];
+            $result = $this->routeMiddleware->dispatch($request, $response);
+            if ($result)
+            {
+                $response = $result;
+            }
+            elseif ($result = $this->actionMiddleware->dispatch($request, $response))
+            {
+                $response = $result;
+            }
+        }
         $response->send();
 
         return $response;

@@ -5,20 +5,18 @@ declare(strict_types=1);
 namespace Imi\Validate\Annotation;
 
 use Imi\Bean\Annotation;
-use Imi\Bean\Annotation\Parser;
 
 /**
  * 文本验证
  *
  * @Annotation
  * @Target({"CLASS", "METHOD", "PROPERTY"})
- * @Parser("\Imi\Bean\Parser\NullParser")
  *
  * @property bool     $char 是否为字符模式，默认为 false；设为 true 则使用字符判断长度；设为 false 则使用字节判断长度
  * @property int      $min  最短长度
  * @property int|null $max  最长长度，为null则不限制长度
  */
-#[\Attribute(\Attribute::TARGET_CLASS | \Attribute::TARGET_METHOD | \Attribute::TARGET_PROPERTY)]
+#[\Attribute(\Attribute::TARGET_CLASS | \Attribute::TARGET_METHOD | \Attribute::TARGET_PROPERTY | \Attribute::IS_REPEATABLE)]
 class Text extends Condition
 {
     /**

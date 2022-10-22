@@ -4,10 +4,13 @@ declare(strict_types=1);
 
 namespace Imi\AMQP\Pool;
 
+use Imi\App;
 use Imi\Pool\BasePoolResource;
 use Imi\Swoole\Util\Coroutine;
 use Imi\Util\Imi;
 use PhpAmqpLib\Connection\AbstractConnection;
+use PhpAmqpLib\Wire\AMQPWriter;
+use Swoole\Coroutine\Channel;
 
 /**
  * AMQP 客户端连接池的资源.
@@ -19,10 +22,24 @@ class AMQPResource extends BasePoolResource
      */
     private AbstractConnection $connection;
 
+    /**
+     * 重置状态的 Channel，重置中不为 null.
+     *
+     * 为兼容无 Swoole 的环境，所以声明为非强类型
+     *
+     * @noRector
+     *
+     * @var \Swoole\Coroutine\Channel|null
+     */
+    private $resetingChannel = null;
+
+    private bool $closed = false;
+
     public function __construct(\Imi\Pool\Interfaces\IPool $pool, AbstractConnection $connection)
     {
         parent::__construct($pool);
         $this->connection = $connection;
+        $this->closed = !$this->connection->isConnected();
     }
 
     /**
@@ -35,7 +52,10 @@ class AMQPResource extends BasePoolResource
             $this->connection->reconnect();
         }
 
-        return $this->connection->isConnected();
+        $result = $this->connection->isConnected();
+        $this->closed = !$result;
+
+        return $result;
     }
 
     /**
@@ -43,11 +63,26 @@ class AMQPResource extends BasePoolResource
      */
     public function close(): void
     {
-        if (!Imi::checkAppType('swoole') || Coroutine::isIn())
+        $this->closed = true;
+        if ($this->resetingChannel)
         {
-            $this->connection->close();
+            $this->resetingChannel->pop();
         }
-        $this->connection->getIO()->close();
+        try
+        {
+            if (!Imi::checkAppType('swoole') || Coroutine::isIn())
+            {
+                $this->connection->close();
+            }
+        }
+        catch (\Exception $e)
+        {
+            // Nothing here
+        }
+        if ($this->connection instanceof \Imi\AMQP\Swoole\AMQPSwooleConnection)
+        {
+            $this->connection->getIO()->close();
+        }
     }
 
     /**
@@ -65,7 +100,17 @@ class AMQPResource extends BasePoolResource
      */
     public function reset(): void
     {
-        foreach ($this->connection->channels as $key => $channel)
+        if ($this->closed)
+        {
+            return;
+        }
+        $inSwoole = \defined('SWOOLE_VERSION') && Coroutine::isIn();
+        if ($inSwoole)
+        {
+            $this->resetingChannel = new Channel();
+        }
+        $connection = $this->connection;
+        foreach ($connection->channels as $key => $channel)
         {
             if (0 === $key)
             {
@@ -84,6 +129,12 @@ class AMQPResource extends BasePoolResource
             }
             unset($this->connection->channels[$key]);
         }
+        if ($inSwoole)
+        {
+            $channel = $this->resetingChannel;
+            $this->resetingChannel = null;
+            $channel->push(1);
+        }
     }
 
     /**
@@ -91,6 +142,36 @@ class AMQPResource extends BasePoolResource
      */
     public function checkState(): bool
     {
-        return $this->connection->isConnected();
+        if (!$this->isOpened())
+        {
+            return false;
+        }
+        try
+        {
+            $pkt = new AMQPWriter();
+            $pkt->write_octet(8);
+            $pkt->write_short(0);
+            $pkt->write_long(0);
+            $pkt->write_octet(0xCE);
+            $this->connection->write($pkt->getvalue());
+
+            return true;
+        }
+        catch (\Throwable $th)
+        {
+            /** @var \Imi\Log\ErrorLog $errorLog */
+            $errorLog = App::getBean('ErrorLog');
+            $errorLog->onException($th);
+
+            return false;
+        }
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    public function isOpened(): bool
+    {
+        return !$this->closed && $this->connection->isConnected();
     }
 }

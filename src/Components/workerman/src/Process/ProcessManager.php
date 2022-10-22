@@ -4,13 +4,20 @@ declare(strict_types=1);
 
 namespace Imi\Workerman\Process;
 
+use Channel\Client;
 use Imi\App;
+use Imi\Config;
 use Imi\Event\Event;
+use Imi\Log\Handler\ConsoleHandler;
+use Imi\Log\Logger;
 use Imi\RequestContext;
+use Imi\Util\Imi;
 use Imi\Util\Process\ProcessAppContexts;
 use Imi\Util\Process\ProcessType;
+use Imi\Worker as ImiWorker;
 use Imi\Workerman\Process\Contract\IProcess;
 use Imi\Workerman\Server\WorkermanServerWorker;
+use Symfony\Component\Console\Output\StreamOutput;
 use Workerman\Worker;
 
 /**
@@ -78,16 +85,55 @@ class ProcessManager
         self::$processes[$processName] = $worker = new WorkermanServerWorker();
         $worker->name = $processName;
         $worker->reloadable = false;
-        $worker->onWorkerStart = function (Worker $worker) use ($args, $processName, $options) {
+        $worker->onWorkerStart = static function (Worker $worker) use ($args, $processName, $options) {
+            // 随机数播种
+            mt_srand();
+            Imi::loadRuntimeInfo(Imi::getCurrentModeRuntimePath('runtime'));
+
             App::set(ProcessAppContexts::PROCESS_TYPE, ProcessType::PROCESS, true);
             App::set(ProcessAppContexts::PROCESS_NAME, $processName, true);
+
+            if (WorkermanServerWorker::$daemonize)
+            {
+                /** @var Logger $loggerInstance */
+                $loggerInstance = App::getBean('Logger');
+                foreach ($loggerInstance->getLoggers() as $logger)
+                {
+                    foreach ($logger->getHandlers() as $handler)
+                    {
+                        if ($handler instanceof ConsoleHandler)
+                        {
+                            $handler->setOutput($stdoutStream ??= new StreamOutput(fopen(WorkermanServerWorker::$stdoutFile, 'a')));
+                        }
+                    }
+                }
+            }
 
             RequestContext::muiltiSet([
                 'worker' => $worker,
             ]);
 
-            // 随机数播种
-            mt_srand();
+            // 多进程通讯组件连接
+            $channel = Config::get('@app.workerman.channel');
+            if ($channel)
+            {
+                Client::connect($channel['host'] ?: '127.0.0.1', $channel['port'] ?: 2206);
+                // 监听进程通讯
+                $callback = static function (array $data) {
+                    $action = $data['action'] ?? null;
+                    if (!$action)
+                    {
+                        return;
+                    }
+                    Event::trigger('IMI.PIPE_MESSAGE.' . $action, [
+                        'data' => $data,
+                    ]);
+                };
+                $workerId = ImiWorker::getWorkerId();
+                Client::on('imi.process.message.' . $processName . '.' . $workerId, $callback);
+                Client::on('imi.process.message.' . $workerId, $callback);
+            }
+
             // 进程开始事件
             Event::trigger('IMI.PROCESS.BEGIN', [
                 'name'    => $processName,

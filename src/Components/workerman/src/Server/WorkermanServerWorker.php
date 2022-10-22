@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Imi\Workerman\Server;
 
+use Imi\Util\Imi;
 use Workerman\Worker;
 
 class WorkermanServerWorker extends Worker
@@ -28,6 +29,15 @@ class WorkermanServerWorker extends Worker
     public static function getMasterPid(): int
     {
         return static::$_masterPid;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    protected static function init()
+    {
+        parent::init();
+        static::$_startFile = Imi::getCurrentModeRuntimePath('start_file');
     }
 
     public static function clearAll(): void
@@ -64,8 +74,8 @@ class WorkermanServerWorker extends Worker
             'worker_exit_info' => [],
         ];
         static::$_availableEventLoops = [
-            'event'    => '\Workerman\Events\Event',
-            'libevent' => '\Workerman\Events\Libevent',
+            'event'    => \Workerman\Events\Event::class,
+            'libevent' => \Workerman\Events\Libevent::class,
         ];
         static::$_builtinTransports = [
             'tcp'   => 'tcp',
@@ -95,5 +105,17 @@ class WorkermanServerWorker extends Worker
         static::$_outputStream = null;
         // @phpstan-ignore-next-line
         static::$_outputDecorated = null;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    protected static function displayUI()
+    {
+        // BUG: https://github.com/walkor/workerman/pull/708
+        // 此处为修复低版本 bug
+        $tmpArgv = $GLOBALS['argv'];
+        parent::displayUI();
+        $GLOBALS['argv'] = $tmpArgv;
     }
 }

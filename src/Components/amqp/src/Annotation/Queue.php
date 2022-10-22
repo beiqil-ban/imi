@@ -5,14 +5,12 @@ declare(strict_types=1);
 namespace Imi\AMQP\Annotation;
 
 use Imi\Bean\Annotation\Base;
-use Imi\Bean\Annotation\Parser;
 
 /**
  * 队列.
  *
  * @Annotation
  * @Target({"CLASS"})
- * @Parser("Imi\Bean\Parser\NullParser")
  *
  * @property string                           $name       队列名称
  * @property string                           $routingKey 路由键
@@ -24,7 +22,7 @@ use Imi\Bean\Annotation\Parser;
  * @property array|\PhpAmqpLib\Wire\AMQPTable $arguments  参数
  * @property int|null                         $ticket     参数
  */
-#[\Attribute(\Attribute::TARGET_CLASS)]
+#[\Attribute(\Attribute::TARGET_CLASS | \Attribute::IS_REPEATABLE)]
 class Queue extends Base
 {
     /**

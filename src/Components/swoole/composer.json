@@ -4,7 +4,8 @@
     "license": "MulanPSL-1.0",
     "description": "imi swoole component",
     "require": {
-        "ext-swoole": ">=4.7",
+        "php": ">=7.4 <8.2",
+        "ext-swoole": ">=4.7 <5.1",
         "yurunsoft/swoole-co-pool": "^1.1.0"
     },
     "require-dev": {
@@ -14,12 +15,26 @@
     "autoload": {
         "psr-4": {
             "Imi\\Swoole\\": "src/"
-        }
+        },
+        "files": [
+            "src/functions.php"
+        ]
     },
     "autoload-dev": {
         "psr-4": {
-            "Imi\\Swoole\\Test\\": "tests/unit/"
-        }
+            "Imi\\Swoole\\Test\\": "tests/unit/",
+            "Imi\\Swoole\\Dev\\": "dev/"
+        },
+        "files": [
+            "../../../vendor/autoload.php",
+            "../amqp/vendor/autoload.php"
+        ]
+    },
+    "scripts": {
+        "pre-install-cmd": "Imi\\Swoole\\Dev\\Dev::preUpdate",
+        "pre-update-cmd": "Imi\\Swoole\\Dev\\Dev::preUpdate",
+        "post-install-cmd": "Imi\\Swoole\\Dev\\Dev::postUpdate",
+        "post-update-cmd": "Imi\\Swoole\\Dev\\Dev::postUpdate"
     },
     "bin": [
         "bin/imi-swoole",

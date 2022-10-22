@@ -209,7 +209,7 @@ class Insert
     {
         foreach ($annotations as $annotationItem)
         {
-            if ($model->{$annotationItem->type} == $annotationItem->typeValue)
+            if ($model[$annotationItem->type] == $annotationItem->typeValue)
             {
                 $className = BeanFactory::getObjectClass($model);
                 $eventName = 'IMI.MODEL.RELATION.INSERT.' . $className . '.' . $propertyName;
@@ -225,7 +225,7 @@ class Insert
 
                 $rightModel = $model[$propertyName];
                 $rightModel[$modelField] = $model[$field];
-                $model[$propertyName]->insert();
+                $rightModel->insert();
 
                 Event::trigger($eventName . '.AFTER', [
                     'model'        => $model,

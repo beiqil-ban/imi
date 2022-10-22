@@ -69,7 +69,7 @@ class BeforeInsert implements IBeforeInsertEventListener
      * @param BeforeInsertEventParam $e
      * @return void
      */
-    public function handle(BeforeInsertEventParam $e)
+    public function handle(BeforeInsertEventParam $e): void
     {
         $e->data->data = json_encode($e->data->data);
         $e->data->ip = inet_pton($e->data->ip);
@@ -101,7 +101,7 @@ class BeforeInsert implements IBeforeInsertEventListener
 
 #### 模型类静态事件监听
 
-事件名称为`模型类名:事件名`，如：`XXX\Model\Test`+`BeforeBatchUpdate`=`XXX\Model\Test:BeforeBatchUpdate`
+事件名称为`模型类名:事件名`，如：`XXX\Model\Test`+`:`+`BeforeBatchUpdate`=`XXX\Model\Test:BeforeBatchUpdate`
 
 ```php
 <?php
@@ -111,7 +111,7 @@ use Imi\Model\Event\Param\BeforeBatchUpdateEventParam;
 use Imi\Model\Event\Listener\IBeforeBatchUpdateEventListener;
 
 /**
- * @Listener("XXX\Model\TestBeforeBatchUpdate")
+ * @Listener("XXX\Model\Test:BeforeBatchUpdate")
  */
 class BeforeBatchUpdate implements IBeforeBatchUpdateEventListener
 {
@@ -120,7 +120,7 @@ class BeforeBatchUpdate implements IBeforeBatchUpdateEventListener
      * @param BeforeBatchUpdateEventParam $e
      * @return void
      */
-    public function handle(BeforeBatchUpdateEventParam $e)
+    public function handle(BeforeBatchUpdateEventParam $e): void
     {
         // $e->data->name = '123'; // 在更新前可以对数据赋值
     }

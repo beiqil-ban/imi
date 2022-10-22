@@ -24,6 +24,11 @@ abstract class BaseConsumer implements IConsumer
         $this->initConfig();
     }
 
+    public function __destruct()
+    {
+        $this->stop();
+    }
+
     /**
      * {@inheritDoc}
      */
@@ -44,7 +49,8 @@ abstract class BaseConsumer implements IConsumer
      */
     public function stop(): void
     {
-        if ($this->channel)
+        // @phpstan-ignore-next-line
+        if ($this->channel && $this->channel->getConnection() && ($connection = $this->channel->getConnection()) && $connection->isConnected())
         {
             $this->channel->close();
             $this->channel = null;
@@ -65,27 +71,47 @@ abstract class BaseConsumer implements IConsumer
      */
     protected function bindConsumer(): void
     {
+        $isSwoole = Imi::checkAppType('swoole');
         foreach ($this->consumers as $consumer)
         {
             foreach ((array) $consumer->queue as $queueName)
             {
                 $messageClass = $consumer->message ?? \Imi\AMQP\Message::class;
-                $this->channel->basic_consume($queueName, $consumer->tag, false, false, false, false, function (\PhpAmqpLib\Message\AMQPMessage $message) use ($messageClass) {
+                $this->channel->basic_consume($queueName, $consumer->tag, false, false, false, false, function (\PhpAmqpLib\Message\AMQPMessage $message) use ($messageClass, $isSwoole) {
+                    $result = ConsumerResult::NACK;
                     try
                     {
                         /** @var \Imi\AMQP\Message $messageInstance */
                         $messageInstance = new $messageClass();
                         $messageInstance->setAMQPMessage($message);
-                        if (Imi::checkAppType('swoole'))
+                        if ($isSwoole)
                         {
                             $result = goWait(function () use ($messageInstance) {
-                                return $this->consume($messageInstance);
+                                try
+                                {
+                                    return $this->consume($messageInstance);
+                                }
+                                catch (\Throwable $th)
+                                {
+                                    // @phpstan-ignore-next-line
+                                    App::getBean('ErrorLog')->onException($th);
+
+                                    return ConsumerResult::NACK;
+                                }
                             });
                         }
                         else
                         {
                             $result = $this->consume($messageInstance);
                         }
+                    }
+                    catch (\Throwable $th)
+                    {
+                        // @phpstan-ignore-next-line
+                        App::getBean('ErrorLog')->onException($th);
+                    }
+                    finally
+                    {
                         switch ($result)
                         {
                             case ConsumerResult::ACK:
@@ -104,11 +130,6 @@ abstract class BaseConsumer implements IConsumer
                                 $this->channel->basic_reject($message->getDeliveryTag(), true);
                                 break;
                         }
-                    }
-                    catch (\Throwable $th)
-                    {
-                        // @phpstan-ignore-next-line
-                        App::getBean('ErrorLog')->onException($th);
                     }
                 });
             }

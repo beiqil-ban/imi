@@ -11,6 +11,7 @@ use Imi\Core\App\Contract\BaseApp;
 use Imi\Core\App\Enum\LoadRuntimeResult;
 use Imi\Util\Imi;
 use Imi\Util\Process\ProcessAppContexts;
+use Imi\Util\System;
 use Symfony\Component\Console\Application;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\EventDispatcher\EventDispatcher;
@@ -30,6 +31,12 @@ class CliApp extends BaseApp
         App::set(ProcessAppContexts::SCRIPT_NAME, realpath($_SERVER['SCRIPT_FILENAME']));
         $this->cliEventDispatcher = $dispatcher = new EventDispatcher();
         $this->cli = $cli = new Application('imi', App::getImiPrettyVersion());
+
+        // 修复 Symfony 5.4.12 出现 Ctrl+C 无法停止服务
+        if (method_exists($cli, 'setSignalsToDispatchEvent'))
+        {
+            $cli->setSignalsToDispatchEvent();
+        }
         $cli->setDispatcher($dispatcher);
         $cli->setCatchExceptions(false);
 
@@ -60,6 +67,21 @@ class CliApp extends BaseApp
                 null,
             )
         );
+        $definition->addOption(
+            new InputOption(
+                'bootstrap',
+                null,
+                InputOption::VALUE_OPTIONAL,
+                'Set bootstrap file',
+                null,
+            )
+        );
+        $input = ImiCommand::getInput();
+        $bootstrap = $input->getParameterOption('--bootstrap', null);
+        if (null !== $bootstrap)
+        {
+            require $bootstrap;
+        }
     }
 
     /**
@@ -175,5 +197,69 @@ class CliApp extends BaseApp
                 ],
             ]);
         }
+    }
+
+    public static function printImi(): void
+    {
+        $output = ImiCommand::getOutput();
+        $output->write('<comment>' . <<<'STR'
+         _               _
+        (_)  _ __ ___   (_)
+        | | | '_ ` _ \  | |
+        | | | | | | | | | |
+        |_| |_| |_| |_| |_|
+
+        </comment>
+        STR
+        );
+    }
+
+    public static function printEnvInfo(string $serverName, string $serverVer): void
+    {
+        $output = ImiCommand::getOutput();
+        $output->writeln('<fg=yellow;options=bold>[System]</>');
+        $system = (\defined('PHP_OS_FAMILY') && 'Unknown' !== \PHP_OS_FAMILY) ? \PHP_OS_FAMILY : \PHP_OS;
+
+        switch ($system)
+        {
+            case 'Linux':
+                $system .= ' - ' . Imi::getLinuxVersion();
+                break;
+            case 'Darwin':
+                $system .= ' - ' . Imi::getDarwinVersion();
+                break;
+            case 'CYGWIN':
+                $system .= ' - ' . Imi::getCygwinVersion();
+                break;
+        }
+        $output->writeln('<info>System:</info> ' . $system);
+        if (Imi::isDockerEnvironment())
+        {
+            $output->writeln('<info>Virtual machine:</info> Docker');
+        }
+        elseif (Imi::isWSL())
+        {
+            $output->writeln('<info>Virtual machine:</info> WSL');
+        }
+        $output->writeln('<info>CPU:</info> ' . System::getCpuCoresNum() . ' Cores');
+        $output->writeln('<info>Disk:</info> Free ' . Imi::formatByte(@disk_free_space('.'), 3) . ' / Total ' . Imi::formatByte(@disk_total_space('.'), 3));
+
+        if ($netIp = System::netLocalIp())
+        {
+            $output->writeln(\PHP_EOL . '<fg=yellow;options=bold>[Network]</>');
+            foreach ($netIp as $name => $ip)
+            {
+                $output->writeln('<info>' . $name . '</info>: ' . $ip);
+            }
+        }
+
+        $output->writeln(\PHP_EOL . '<fg=yellow;options=bold>[PHP]</>');
+        $output->writeln('<info>Version:</info> v' . \PHP_VERSION);
+        $output->writeln("<info>{$serverName}:</info> v{$serverVer}");
+        $output->writeln('<info>imi:</info> ' . App::getImiPrettyVersion());
+        $output->writeln('<info>Timezone:</info> ' . date_default_timezone_get());
+        $output->writeln('<info>Opcache:</info> ' . Imi::getOpcacheInfo());
+
+        $output->writeln('');
     }
 }

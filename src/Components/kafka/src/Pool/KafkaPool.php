@@ -43,9 +43,8 @@ class KafkaPool
             }
 
             $producerConfig = self::createProducerConfig($config);
-            $producer = new Producer($producerConfig);
 
-            return $producer;
+            return new Producer($producerConfig);
         }
     }
 
@@ -84,9 +83,8 @@ class KafkaPool
                 $connection = new Producer($producerConfig);
                 App::set($requestContextKey, $connection);
             }
-            $requestContext[$requestContextKey] = $connection;
 
-            return $connection;
+            return $requestContext[$requestContextKey] = $connection;
         }
     }
 
@@ -106,12 +104,8 @@ class KafkaPool
 
     /**
      * 处理连接池名称.
-     *
-     * @param string $poolName
-     *
-     * @return string
      */
-    public static function parsePoolName(?string $poolName = null)
+    public static function parsePoolName(?string $poolName = null): string
     {
         if (null === $poolName)
         {

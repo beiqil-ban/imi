@@ -4,6 +4,7 @@
     "license": "MIT",
     "description": "在 imi 框架中开发 MQTT 服务端，并且内置了一个 MQTT 客户端",
     "require": {
+        "php": ">=7.4 <8.2",
         "binsoul/net-mqtt": "^0.8.0"
     },
     "require-dev": {
@@ -19,15 +20,33 @@
     "autoload-dev": {
         "psr-4": {
             "MQTTApp\\": "example/",
-            "Imi\\MQTT\\Test\\": "tests/"
-        }
+            "Imi\\MQTT\\Test\\": "tests/",
+            "Imi\\MQTT\\Dev\\": "dev/"
+        },
+        "files": [
+            "../../../vendor/autoload.php",
+            "../../../dev/try-include-swoole.php"
+        ]
     },
-    "scripts": {},
+    "scripts": {
+        "pre-install-cmd": "Imi\\MQTT\\Dev\\Dev::preUpdate",
+        "pre-update-cmd": "Imi\\MQTT\\Dev\\Dev::preUpdate",
+        "post-install-cmd": "Imi\\MQTT\\Dev\\Dev::postUpdate",
+        "post-update-cmd": "Imi\\MQTT\\Dev\\Dev::postUpdate"
+    },
     "extra": {
         "ide-helper": {
             "list": [
                 "redis"
             ]
+        }
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true,
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "yurunsoft/ide-helper": true
         }
     }
 }

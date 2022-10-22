@@ -53,7 +53,7 @@ class FacadeGenerate extends BaseCommand
         }
         $namespace = Imi::getClassNamespace($facadeClass);
         $shortClassName = Imi::getClassShortName($facadeClass);
-        $fileName = Imi::getNamespacePath($namespace);
+        $fileName = Imi::getNamespacePath($namespace, true);
         if (null === $fileName)
         {
             throw new \RuntimeException(sprintf('Get namespace %s path failed', $namespace));
@@ -76,7 +76,31 @@ class FacadeGenerate extends BaseCommand
             $docComment = $method->getDocComment();
             if (false !== $docComment && preg_match('/@return\s+([^\s]+)/', $docComment, $matches) > 0)
             {
-                $returnType = $matches[1];
+                $class = $matches[1];
+                if ('self' === $class || 'static' === $class)
+                {
+                    $returnType = '\\' . $method->getDeclaringClass()->getName();
+                }
+                elseif ('\\' === $class[0])
+                {
+                    $returnType = $class;
+                }
+                else
+                {
+                    $fullClass = $method->getDeclaringClass()->getNamespaceName() . '\\' . $class;
+                    if (class_exists($fullClass) || interface_exists($fullClass, false) || trait_exists($fullClass, false))
+                    {
+                        $returnType = '\\' . $fullClass;
+                    }
+                    elseif (class_exists($class))
+                    {
+                        $returnType = '\\' . $class;
+                    }
+                    else
+                    {
+                        $returnType = $class;
+                    }
+                }
             }
             elseif ($method->hasReturnType())
             {
@@ -121,7 +145,7 @@ class FacadeGenerate extends BaseCommand
             $methods[] = '@method static ' . $returnType . ' ' . $methodName . '(' . $params . ')';
         }
         // @phpstan-ignore-next-line
-        $content = (function () use ($namespace, $facadeAnnotation, $methods, $shortClassName): string {
+        $content = (static function () use ($namespace, $facadeAnnotation, $methods, $shortClassName): string {
             ob_start();
             include __DIR__ . '/template.tpl';
 

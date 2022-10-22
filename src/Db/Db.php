@@ -8,8 +8,11 @@ use Imi\App;
 use Imi\Config;
 use Imi\Db\Exception\DbException;
 use Imi\Db\Interfaces\IDb;
+use Imi\Db\Interfaces\IStatement;
 use Imi\Db\Query\Interfaces\IQuery;
+use Imi\Db\Query\Interfaces\IResult;
 use Imi\Db\Query\QueryType;
+use Imi\Db\Query\Result;
 use Imi\Pool\Interfaces\IPoolResource;
 use Imi\Pool\PoolManager;
 use Imi\RequestContext;
@@ -70,12 +73,6 @@ class Db
         }
         else
         {
-            $requestContextKey = '__db.' . $poolName;
-            $requestContext = RequestContext::getContext();
-            if (isset($requestContext[$requestContextKey]))
-            {
-                return $requestContext[$requestContextKey];
-            }
             if (null === self::$connections)
             {
                 self::$connections = Config::get('@app.db.connections');
@@ -85,8 +82,17 @@ class Db
             {
                 throw new \RuntimeException(sprintf('Not found db config %s', $poolName));
             }
-            /** @var IDb|null $db */
-            $db = App::get($requestContextKey);
+            $requestContextKey = '__db.' . $poolName;
+            $requestContext = RequestContext::getContext();
+            if (isset($requestContext[$requestContextKey]))
+            {
+                $db = $requestContext[$requestContextKey];
+            }
+            else
+            {
+                /** @var IDb|null $db */
+                $db = App::get($requestContextKey);
+            }
             if (null === $db || !$db->isConnected())
             {
                 /** @var IDb $db */
@@ -113,9 +119,8 @@ class Db
             {
                 self::heartbeat($db);
             }
-            $requestContext[$requestContextKey] = $db;
 
-            return $db;
+            return $requestContext[$requestContextKey] = $db;
         }
     }
 
@@ -209,9 +214,7 @@ class Db
 
         if (PoolManager::exists($poolName))
         {
-            return PoolManager::use($poolName, function (IPoolResource $resource, IDb $db) use ($callable) {
-                return $callable($db);
-            });
+            return PoolManager::use($poolName, static fn (IPoolResource $resource, IDb $db) => $callable($db));
         }
         else
         {
@@ -231,9 +234,7 @@ class Db
         $poolName = self::parsePoolName($poolName, $queryType);
         if (PoolManager::exists($poolName))
         {
-            return PoolManager::use($poolName, function (IPoolResource $resource, IDb $db) use ($callable) {
-                return static::trans($db, $callable);
-            });
+            return PoolManager::use($poolName, fn (IPoolResource $resource, IDb $db) => static::trans($db, $callable));
         }
         else
         {
@@ -273,11 +274,64 @@ class Db
         catch (\Throwable $th)
         {
             // 回滚事务
-            if ($db->inTransaction())
+            if ($db->inTransaction() && $db->isConnected())
             {
                 $db->rollBack();
             }
             throw $th;
         }
+    }
+
+    /**
+     * 执行 SQL 并返回受影响的行数.
+     */
+    public static function exec(string $sql, array $bindValues = [], ?string $poolName = null, int $queryType = QueryType::WRITE): int
+    {
+        if ($bindValues)
+        {
+            $stmt = self::getInstance($poolName, $queryType)->prepare($sql);
+            if ($stmt->execute($bindValues))
+            {
+                return $stmt->rowCount();
+            }
+            else
+            {
+                return 0;
+            }
+        }
+        else
+        {
+            return self::getInstance($poolName, $queryType)->exec($sql);
+        }
+    }
+
+    /**
+     * 执行 SQL 返回结果.
+     */
+    public static function select(string $sql, array $bindValues = [], ?string $poolName = null, int $queryType = QueryType::WRITE): ?IResult
+    {
+        $db = self::getInstance($poolName, $queryType);
+        if ($bindValues)
+        {
+            $stmt = $db->prepare($sql);
+            if (!$stmt->execute($bindValues))
+            {
+                return new Result(false);
+            }
+        }
+        else
+        {
+            $stmt = $db->query($sql);
+        }
+
+        return new Result($stmt, null, true);
+    }
+
+    /**
+     * 准备执行语句并返回一个语句对象
+     */
+    public static function prepare(string $sql, ?string $poolName = null, int $queryType = QueryType::WRITE): IStatement
+    {
+        return self::getInstance($poolName, $queryType)->prepare($sql);
     }
 }

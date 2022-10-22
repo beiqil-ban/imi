@@ -8,6 +8,7 @@ use Imi\Db\Exception\DbException;
 use Imi\Pgsql\Db\Contract\IPgsqlDb;
 use Imi\Pgsql\Db\Contract\IPgsqlStatement;
 use Imi\Pgsql\Db\PgsqlBaseStatement;
+use Imi\Swoole\Util\Coroutine;
 
 /**
  * Swoole Coroutine Pgsql 驱动 Statement.
@@ -75,6 +76,14 @@ class Statement extends PgsqlBaseStatement implements IPgsqlStatement
         }
     }
 
+    public function __destruct()
+    {
+        if (null !== $this->statementName && Coroutine::isIn() && $this->db->isConnected())
+        {
+            $this->db->exec('DEALLOCATE ' . $this->statementName);
+        }
+    }
+
     /**
      * {@inheritDoc}
      */
@@ -86,7 +95,7 @@ class Statement extends PgsqlBaseStatement implements IPgsqlStatement
     /**
      * {@inheritDoc}
      */
-    public function bindColumn($column, &$param, ?int $type = null, ?int $maxLen = null, $driverData = null): bool
+    public function bindColumn($column, &$param, ?int $type = null, ?int $maxLen = 0, $driverData = null): bool
     {
         $this->bindValues[$column] = $param;
 
@@ -96,7 +105,7 @@ class Statement extends PgsqlBaseStatement implements IPgsqlStatement
     /**
      * {@inheritDoc}
      */
-    public function bindParam($parameter, &$variable, int $dataType = \PDO::PARAM_STR, ?int $length = null, $driverOptions = null): bool
+    public function bindParam($parameter, &$variable, int $dataType = \PDO::PARAM_STR, ?int $length = 0, $driverOptions = null): bool
     {
         $this->bindValues[$parameter] = $variable;
 
@@ -169,7 +178,7 @@ class Statement extends PgsqlBaseStatement implements IPgsqlStatement
             $this->queryResult = $queryResult = $pgDb->query($this->lastSql);
             if (false === $queryResult)
             {
-                throw new DbException('SQL query error: [' . $this->errorCode() . '] ' . $this->errorInfo() . ' sql: ' . $this->getSql());
+                throw new DbException('SQL query error: [' . $this->errorCode() . '] ' . $this->errorInfo() . ' sql: ' . $this->getSql() . \PHP_EOL);
             }
         }
         else
@@ -208,7 +217,13 @@ class Statement extends PgsqlBaseStatement implements IPgsqlStatement
             $this->queryResult = $queryResult = $pgDb->execute($this->statementName, $bindValues);
             if (false === $queryResult)
             {
-                throw new DbException('SQL query error: [' . $this->errorCode() . '] ' . $this->errorInfo() . ' sql: ' . $this->getSql());
+                $errorCode = $this->errorCode();
+                $errorInfo = $this->errorInfo();
+                if ($this->db->checkCodeIsOffline($errorCode))
+                {
+                    $this->db->close();
+                }
+                throw new DbException('SQL query error: [' . $errorCode . '] ' . $errorInfo . \PHP_EOL . 'sql: ' . $this->getSql() . \PHP_EOL);
             }
         }
         $this->result = $pgDb->fetchAll($queryResult, \SW_PGSQL_ASSOC) ?: [];
@@ -263,7 +278,7 @@ class Statement extends PgsqlBaseStatement implements IPgsqlStatement
     /**
      * {@inheritDoc}
      */
-    public function fetchObject(string $className = 'stdClass', ?array $ctorArgs = null)
+    public function fetchObject(string $className = \stdClass::class, ?array $ctorArgs = null)
     {
         $row = current($this->result);
         if (false === $row)
@@ -271,7 +286,7 @@ class Statement extends PgsqlBaseStatement implements IPgsqlStatement
             return null;
         }
         next($this->result);
-        if ('stdClass' === $className)
+        if (\stdClass::class === $className)
         {
             return (object) $row;
         }
@@ -369,8 +384,7 @@ class Statement extends PgsqlBaseStatement implements IPgsqlStatement
     /**
      * {@inheritDoc}
      */
-    #[\ReturnTypeWillChange]
-    public function valid()
+    public function valid(): bool
     {
         return false !== $this->current();
     }

@@ -61,10 +61,10 @@ trait TLockableParser
 
         // options
         $options = $lockable->options;
-        $options['waitTimeout'] = null !== $lockable->waitTimeout ? $lockable->waitTimeout : ($options['waitTimeout'] ?? 3000);
-        $options['lockExpire'] = null !== $lockable->lockExpire ? $lockable->lockExpire : ($options['lockExpire'] ?? 3000);
-        $options['timeoutException'] = null !== $lockable->timeoutException ? $lockable->timeoutException : ($options['timeoutException'] ?? false);
-        $options['unlockException'] = null !== $lockable->unlockException ? $lockable->unlockException : ($options['unlockException'] ?? false);
+        $options['waitTimeout'] = $lockable->waitTimeout ?? $options['waitTimeout'] ?? 3000;
+        $options['lockExpire'] = $lockable->lockExpire ?? $options['lockExpire'] ?? 3000;
+        $options['timeoutException'] = $lockable->timeoutException ?? $options['timeoutException'] ?? false;
+        $options['unlockException'] = $lockable->unlockException ?? $options['unlockException'] ?? false;
 
         // Lock 对象
         /** @var ILockHandler $locker */
@@ -81,7 +81,7 @@ trait TLockableParser
         $result = null;
         if (null !== $lockableAfterLock)
         {
-            $afterLockCallable = function () use ($lockableAfterLock, &$result): bool {
+            $afterLockCallable = static function () use ($lockableAfterLock, &$result): bool {
                 $result = $lockableAfterLock();
 
                 return null !== $result;
@@ -91,7 +91,7 @@ trait TLockableParser
         if (null !== $afterLock)
         {
             $firstAfterLockCallable = $afterLockCallable;
-            $afterLockCallable = function () use ($firstAfterLockCallable, $afterLock, &$result): bool {
+            $afterLockCallable = static function () use ($firstAfterLockCallable, $afterLock, &$result): bool {
                 if (null !== $firstAfterLockCallable)
                 {
                     $result = $firstAfterLockCallable();
@@ -106,7 +106,7 @@ trait TLockableParser
             };
         }
 
-        if (!$locker->lock(function () use ($taskCallable, &$result) {
+        if (!$locker->lock(static function () use ($taskCallable, &$result) {
             // 执行原方法
             $result = $taskCallable();
         }, $afterLockCallable))
@@ -136,7 +136,7 @@ trait TLockableParser
         }
         else
         {
-            return preg_replace_callback('/\{([^\}]+)\}/', function (array $matches) use ($args): string {
+            return preg_replace_callback('/\{([^\}]+)\}/', static function (array $matches) use ($args): string {
                 $value = ObjectArrayHelper::get($args, $matches[1]);
                 if (is_scalar($value))
                 {

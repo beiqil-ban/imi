@@ -80,10 +80,8 @@ abstract class Query implements IQuery
 
     /**
      * 查询结果集类名.
-     *
-     * @var string
      */
-    protected $resultClass = Result::class;
+    protected string $resultClass = Result::class;
 
     /**
      * 别名 Sql 数据集合.
@@ -112,8 +110,10 @@ abstract class Query implements IQuery
 
     public function __clone()
     {
-        $this->isInitDb = false;
-        $this->db = null;
+        if (!$this->isInitDb)
+        {
+            $this->db = null;
+        }
         $this->option = clone $this->option;
     }
 
@@ -290,7 +290,7 @@ abstract class Query implements IQuery
         {
             return $this;
         }
-        $func = function (array $condition) use (&$func): array {
+        $func = static function (array $condition) use (&$func): array {
             $result = [];
             foreach ($condition as $key => $value)
             {
@@ -343,18 +343,14 @@ abstract class Query implements IQuery
                 else
                 {
                     // 逻辑运算符
-                    $result[] = new WhereBrackets(function () use ($func, $value) {
-                        return $func($value);
-                    }, $key);
+                    $result[] = new WhereBrackets(static fn () => $func($value), $key);
                 }
             }
 
             return $result;
         };
 
-        return $this->whereBrackets(function () use ($condition, $func) {
-            return $func($condition);
-        }, $logicalOperator);
+        return $this->whereBrackets(static fn () => $func($condition), $logicalOperator);
     }
 
     /**
@@ -818,7 +814,7 @@ abstract class Query implements IQuery
             $this->binds = [];
             $stmt->execute($binds);
 
-            return new $this->resultClass($stmt, $this->modelClass);
+            return new $this->resultClass($stmt, $this->modelClass, true);
         }
         finally
         {

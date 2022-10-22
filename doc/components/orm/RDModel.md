@@ -73,7 +73,7 @@ class Test extends Model
      * Get iD
      *
      * @return  int
-     */ 
+     */
     public function getId()
     {
         return $this->id;
@@ -85,7 +85,7 @@ class Test extends Model
      * @param  int  $id  ID
      *
      * @return  self
-     */ 
+     */
     public function setId(int $id)
     {
         $this->id = $id;
@@ -97,7 +97,7 @@ class Test extends Model
      * Get aaa
      *
      * @return  string
-     */ 
+     */
     public function getA()
     {
         return $this->a;
@@ -109,7 +109,7 @@ class Test extends Model
      * @param  string  $a  aaa
      *
      * @return  self
-     */ 
+     */
     public function setA(string $a)
     {
         $this->a = $a;
@@ -121,7 +121,7 @@ class Test extends Model
      * Get bbb
      *
      * @return  string
-     */ 
+     */
     public function getB()
     {
         return $this->b;
@@ -133,7 +133,7 @@ class Test extends Model
      * @param  string  $b  bbb
      *
      * @return  self
-     */ 
+     */
     public function setB(string $b)
     {
         $this->b = $b;
@@ -145,7 +145,7 @@ class Test extends Model
      * Get ccc
      *
      * @return  string
-     */ 
+     */
     public function getC()
     {
         return $this->c;
@@ -157,7 +157,7 @@ class Test extends Model
      * @param  string  $c  ccc
      *
      * @return  self
-     */ 
+     */
     public function setC(string $c)
     {
         $this->c = $c;
@@ -184,6 +184,12 @@ class Test extends Model
 序列化时不使用驼峰命名，使用原本的字段名：
 
 `@Entity(false)`
+
+将模型设为非 bean 类：
+
+`@Entity(camel=true, bean=false)`
+
+> 非 bean 类性能更好，但无法用 AOP 切入类，事件也不生效，一般模型建议使用非 bean 类模式。
 
 ### @Table
 
@@ -223,10 +229,10 @@ class Test extends Model
   `time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`) USING BTREE
 ) ENGINE=InnoDB AUTO_INCREMENT=11 DEFAULT CHARSET=utf8 ROW_FORMAT=COMPACT")
- * @property int $id 
- * @property string $title 
- * @property string $content 
- * @property string $time 
+ * @property int $id
+ * @property string $title
+ * @property string $content
+ * @property string $time
  */
 abstract class ArticleBase extends Model
 {
@@ -245,7 +251,7 @@ abstract class ArticleBase extends Model
 
 写在属性上，定义字段列
 
-`@Column(name="字段名", type="字段类型", length="长度", nullable="是否允许为空true/false", accuracy="精度，小数位后几位", default="默认值", isPrimaryKey="是否为主键true/false", primaryKeyIndex="联合主键中的第几个，从0开始", isAutoIncrement="是否为自增字段true/false", virtual="虚拟字段，不参与数据库操作true/false", updateTime=true)`
+`@Column(name="字段名", type="字段类型", length="长度", nullable="是否允许为空true/false", accuracy="精度，小数位后几位", default="默认值", isPrimaryKey="是否为主键true/false", primaryKeyIndex="联合主键中的第几个，从0开始", isAutoIncrement="是否为自增字段true/false", virtual="虚拟字段，不参与数据库操作true/false", updateTime=true, reference="引用字段名，作为引用字段的别名使用，拥有同等的读写能力，需要将virtual设为true", unsigned=false)`
 
 > 当你指定`type=json`时，写入数据库时自动`json_encode`，从数据实例化到对象时自动`json_decode`
 
@@ -405,7 +411,7 @@ select `tb_member`.*,(1+1) as `a`,(2+2) as `test2` from `tb_member` where `id`=:
  * @ExtractProperty(fieldName="ex.userId", alias="userId2")
  */
 protected $xxx = [
-    'ex'	=>	[
+    'ex'    =>	[
         'userId'	=>	123,
     ],
 ];
@@ -498,7 +504,9 @@ $list = TestModel::query()
                 ->with('关联字段名') // 单个
                 ->with(['字段名1', '字段名2']) // 多个
                 ->with([
-                    '字段名1' => function(\Imi\Model\Contract\IModelQuery $query) {
+                    // 回调第一个参数是：模型查询构建器
+                    // 第二个参数是当前关联查询对应的注解对象，如果不确定什么类型可以写 RelationBase，如果确定类型也可以写具体类型，比如：\Imi\Model\Annotation\Relation\OneToOne
+                    '字段名1' => function(\Imi\Model\Contract\IModelQuery $query, \Imi\Model\Annotation\Relation\RelationBase $annotation) {
                         $query->withField('a', 'b'); // 限定查询结果模型的可序列化字段
                     },
                 ]) // 回调
@@ -572,12 +580,19 @@ $list = TestModel::query()->where('id', '=', 1)->select()->getArray();
 
 ### 分页查询带扩展字段
 
-查询总记录数、总页数：
+**查询总记录数、总页数：**
 
 ```php
 $page = 1;
 $count = 10;
 $data = TestModel::query()->paginate($page, $count);
+// 指定转数组后的字段名
+$data = TestModel::query()->paginate($page, $count, [
+    'field_list' => 'list',
+    'field_limit' => 'limit',
+    'field_total' => 'total',
+    'field_page_count' => 'page_count',
+]);
 
 $data->getList(); // 列表数据
 $data->getTotal(); // 总记录数
@@ -595,7 +610,7 @@ var_dump(json_encode($data)); // 支持序列化
 ]
 ```
 
-不查询总记录数、总页数：
+**不查询总记录数、总页数：**
 
 ```php
 $page = 1;
@@ -609,6 +624,19 @@ var_dump(json_encode($data)); // 支持序列化
 [
     'list'          => [],
     'limit'         => 10,
+]
+```
+
+**全局设置转数组后的字段名：**
+
+配置`@app.db.paginate.fields`:
+
+```php
+[
+    'list' => 'list',
+    'limit' => 'limit',
+    'total' => 'total',
+    'pageCount' => 'page_count',
 ]
 ```
 

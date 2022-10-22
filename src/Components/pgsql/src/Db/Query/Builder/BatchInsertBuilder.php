@@ -16,7 +16,7 @@ class BatchInsertBuilder extends BaseBuilder
         $params = &$this->params;
         /** @var QueryOption $option */
         $option = $query->getOption();
-        list($list) = $args;
+        [$list] = $args;
         if (null === $list)
         {
             $list = $option->saveData;
@@ -29,7 +29,7 @@ class BatchInsertBuilder extends BaseBuilder
         {
             throw new \RuntimeException('Batch insert must have at least 1 data');
         }
-        $fields = array_keys($list[0]);
+        $fields = array_keys(reset($list));
         $safeFields = [];
         foreach ($fields as $key)
         {

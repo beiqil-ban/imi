@@ -4,6 +4,7 @@
     "license": "MIT",
     "description": "imi 框架配套的 pgsql 组件",
     "require": {
+        "php": ">=7.4 <8.2"
     },
     "require-dev": {
         "swoole/ide-helper": "^4.7"
@@ -15,8 +16,18 @@
     },
     "autoload-dev": {
         "psr-4": {
-            "Imi\\Pgsql\\Test\\": "tests/"
-        }
+            "Imi\\Pgsql\\Test\\": "tests/",
+            "Imi\\Pgsql\\Dev\\": "dev/"
+        },
+        "files": [
+            "../../../vendor/autoload.php",
+            "../../../dev/try-include-swoole.php"
+        ]
     },
-    "scripts": {}
+    "scripts": {
+        "pre-install-cmd": "Imi\\Pgsql\\Dev\\Dev::preUpdate",
+        "pre-update-cmd": "Imi\\Pgsql\\Dev\\Dev::preUpdate",
+        "post-install-cmd": "Imi\\Pgsql\\Dev\\Dev::postUpdate",
+        "post-update-cmd": "Imi\\Pgsql\\Dev\\Dev::postUpdate"
+    }
 }

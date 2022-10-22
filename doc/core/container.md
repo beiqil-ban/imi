@@ -1,6 +1,10 @@
 # 容器
 
-容器用于存放类实例对象，容器中的对象类我们称之为 `Bean`。通过容器实例化出来的对象，我们可以对它们进行注入操作。
+容器用于存放类实例对象，容器中的对象类我们称之为 `Bean`。
+
+通过容器实例化出来的对象，我们可以对它们进行注入操作。
+
+所有通过注解实现的功能，对象如果是直接 `new` 出来的，是不会生效的，必须使用容器！
 
 ## 配置扫描命名空间
 
@@ -18,6 +22,19 @@ return [
 ```
 
 > imi v2.0 版本开始已经不一定需要配置 `beanScan` 了
+
+## 实例化对象
+
+实例化对象用法可以代替 `new`。
+
+```php
+// Bean 名称
+\Imi\Bean\BeanFactory::newInstance('Bean名称');
+// 具体的类名
+\Imi\Bean\BeanFactory::newInstance(XXX::class);
+// 传入构造方法的参数
+\Imi\Bean\BeanFactory::newInstance(XXX::class, 1, 2);
+```
 
 ## 容器分类
 
@@ -95,8 +112,8 @@ use Imi\App;
 // 绑定
 App::getContainer()->bind('aaa', XXX::class);
 
-// 绑定带参数，单例模式，禁用递归依赖
-App::getContainer()->bind('aaa', XXX::class, \Imi\Bean\Annotation\Bean::INSTANCE_TYPE_SINGLETON, false);
+// 绑定带参数，非单例模式，禁用递归依赖
+App::getContainer()->bind('aaa', XXX::class, \Imi\Bean\Annotation\Bean::INSTANCE_TYPE_EACH_NEW, false);
 
 // 实例化
 $obj = App::getBean('aaa');
@@ -110,8 +127,8 @@ use Imi\Server\ServerManager;
 // 绑定
 ServerManager::getServer()->getContainer()->bind('aaa', XXX::class);
 
-// 绑定带参数，单例模式，禁用递归依赖
-ServerManager::getServer()->getContainer()->bind('aaa', XXX::class, \Imi\Bean\Annotation\Bean::INSTANCE_TYPE_SINGLETON, false);
+// 绑定带参数，非单例模式，禁用递归依赖
+ServerManager::getServer()->getContainer()->bind('aaa', XXX::class, \Imi\Bean\Annotation\Bean::INSTANCE_TYPE_EACH_NEW, false);
 
 // 实例化
 $obj = ServerManager::getServer()->getContainer()->getBean('aaa');
@@ -125,8 +142,8 @@ use Imi\RequestContext;
 // 绑定
 RequestContext::getContainer()->bind('aaa', XXX::class);
 
-// 绑定带参数，单例模式，禁用递归依赖
-RequestContext::getContainer()->bind('aaa', XXX::class, \Imi\Bean\Annotation\Bean::INSTANCE_TYPE_SINGLETON, false);
+// 绑定带参数，非单例模式，禁用递归依赖
+RequestContext::getContainer()->bind('aaa', XXX::class, \Imi\Bean\Annotation\Bean::INSTANCE_TYPE_EACH_NEW, false);
 
 // 实例化
 $obj = RequestContext::getBean('aaa');

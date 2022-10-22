@@ -10,15 +10,16 @@ use Imi\Cli\Annotation\Command;
 use Imi\Cli\Annotation\CommandAction;
 use Imi\Cli\Annotation\Option;
 use Imi\Cli\ArgType;
+use Imi\Cli\CliApp;
 use Imi\Cli\Contract\BaseCommand;
 use Imi\Config;
 use Imi\Event\Event;
 use Imi\Pool\PoolManager;
 use Imi\Server\ServerManager;
-use Imi\Util\Imi;
 use Imi\Worker as ImiWorker;
 use Imi\Workerman\Server\Contract\IWorkermanServer;
 use Imi\Workerman\Server\Server as WorkermanServerUtil;
+use Imi\Workerman\Server\WorkermanServerWorker;
 use Workerman\Worker;
 
 /**
@@ -36,7 +37,6 @@ class Server extends BaseCommand
      */
     public function start(?string $name, ?int $workerNum, bool $d = false): void
     {
-        $this->outImi();
         $this->outStartupInfo();
         PoolManager::clearPools();
         CacheManager::clearPools();
@@ -50,7 +50,7 @@ class Server extends BaseCommand
         unset($argv);
 
         // 守护进程
-        Worker::$daemonize = $d;
+        WorkermanServerWorker::$daemonize = $d;
 
         Event::trigger('IMI.WORKERMAN.SERVER.BEFORE_START');
         // 创建服务器对象们前置操作
@@ -96,7 +96,7 @@ class Server extends BaseCommand
         Event::trigger('IMI.SERVERS.CREATE.AFTER');
         WorkermanServerUtil::initWorkermanWorker($name);
         Event::trigger('IMI.APP.INIT', [], $this);
-        Worker::runAll();
+        WorkermanServerWorker::runAll();
     }
 
     /**
@@ -115,24 +115,7 @@ class Server extends BaseCommand
         ];
         unset($argv);
 
-        Worker::runAll();
-    }
-
-    /**
-     * 输出 imi 图标.
-     */
-    public function outImi(): void
-    {
-        $this->output->write('<comment>' . <<<'STR'
-         _               _
-        (_)  _ __ ___   (_)
-        | | | '_ ` _ \  | |
-        | | | | | | | | | |
-        |_| |_| |_| |_| |_|
-
-        </comment>
-        STR
-        );
+        WorkermanServerWorker::runAll();
     }
 
     /**
@@ -140,55 +123,7 @@ class Server extends BaseCommand
      */
     public function outStartupInfo(): void
     {
-        $this->output->writeln('<fg=yellow;options=bold>[System]</>');
-        $system = (\defined('PHP_OS_FAMILY') && 'Unknown' !== \PHP_OS_FAMILY) ? \PHP_OS_FAMILY : \PHP_OS;
-        switch ($system)
-        {
-            case 'Linux':
-                $system .= ' - ' . Imi::getLinuxVersion();
-                break;
-            case 'Darwin':
-                $system .= ' - ' . Imi::getDarwinVersion();
-                break;
-            case 'CYGWIN':
-                $system .= ' - ' . Imi::getCygwinVersion();
-                break;
-        }
-        $this->output->writeln('<info>System:</info> ' . $system);
-        if (Imi::isDockerEnvironment())
-        {
-            $this->output->writeln('<info>Virtual machine:</info> Docker');
-        }
-        elseif (Imi::isWSL())
-        {
-            $this->output->writeln('<info>Virtual machine:</info> WSL');
-        }
-        $this->output->writeln('<info>Disk:</info> Free ' . round(@disk_free_space('.') / (1024 * 1024 * 1024), 3) . ' GB / Total ' . round(@disk_total_space('.') / (1024 * 1024 * 1024), 3) . ' GB');
-
-        if (\function_exists('net_get_interfaces'))
-        {
-            $this->output->writeln(\PHP_EOL . '<fg=yellow;options=bold>[Network]</>');
-            foreach (net_get_interfaces() ?: [] as $name => $item)
-            {
-                $ip = $item['unicast'][1]['address'] ?? null;
-                if (null === $ip || '127.0.0.1' === $ip)
-                {
-                    continue;
-                }
-                if ('Windows' === \PHP_OS_FAMILY && isset($item['description']))
-                {
-                    $name = $item['description'];
-                }
-                $this->output->writeln('<info>' . $name . '</info>: ' . $ip);
-            }
-        }
-
-        $this->output->writeln(\PHP_EOL . '<fg=yellow;options=bold>[PHP]</>');
-        $this->output->writeln('<info>Version:</info> v' . \PHP_VERSION);
-        $this->output->writeln('<info>Workerman:</info> v' . Worker::VERSION);
-        $this->output->writeln('<info>imi:</info> ' . App::getImiPrettyVersion());
-        $this->output->writeln('<info>Timezone:</info> ' . date_default_timezone_get());
-
-        $this->output->writeln('');
+        CliApp::printImi();
+        CliApp::printEnvInfo('Workerman', WorkermanServerWorker::VERSION);
     }
 }

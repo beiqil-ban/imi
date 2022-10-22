@@ -73,6 +73,10 @@ class HttpRoute
         {
             $checkCallables[] = [self::class, 'checkRequestMime'];
         }
+        if (null !== $annotation->domain)
+        {
+            $checkCallables[] = [self::class, 'checkDomain'];
+        }
         if (null === $annotation)
         {
             $annotation = new RouteAnnotation([
@@ -91,20 +95,21 @@ class HttpRoute
         $data = [
             'routeItem' => $routeItem,
         ];
-        if (self::isStaticPath($path))
+        $ignoreCase = $annotation->ignoreCase ?? $this->ignoreCase;
+        if (!$ignoreCase && self::isStaticPath($path))
         {
-            $this->router->addStatic($path, $callable, $annotation->method, $annotation->ignoreCase ?? $this->ignoreCase, $checkCallables, $data);
+            $this->router->addStatic($path, $callable, $annotation->method, $ignoreCase, $checkCallables, $data);
             if ($this->autoEndSlash && !str_ends_with($path, '/'))
             {
-                $this->router->addStatic($path . '/', $callable, $annotation->method, $annotation->ignoreCase ?? $this->ignoreCase, $checkCallables, $data);
+                $this->router->addStatic($path . '/', $callable, $annotation->method, $ignoreCase, $checkCallables, $data);
             }
         }
         else
         {
-            $this->router->add($path, $callable, $annotation->method, $annotation->ignoreCase ?? $this->ignoreCase, $checkCallables, $data);
+            $this->router->add($path, $callable, $annotation->method, $ignoreCase, $checkCallables, $data);
             if ($this->autoEndSlash && !str_ends_with($path, '/'))
             {
-                $this->router->add($path . '/', $callable, $annotation->method, $annotation->ignoreCase ?? $this->ignoreCase, $checkCallables, $data);
+                $this->router->add($path . '/', $callable, $annotation->method, $ignoreCase, $checkCallables, $data);
             }
         }
     }
@@ -198,7 +203,6 @@ class HttpRoute
         $uriDomain = Uri::getDomain($request->getUri());
         foreach ($domain as $rule)
         {
-            $rule = $router->getPathPattern($rule, true, $data);
             if (self::isStaticPath($rule))
             {
                 if (0 === strcasecmp($rule, $uriDomain))
@@ -208,12 +212,13 @@ class HttpRoute
             }
             else
             {
+                $rule = $router->getPathPattern($rule, true, $fields);
                 // 域名匹配不区分大小写
                 if (preg_match_all($rule, $uriDomain, $matches) > 0)
                 {
-                    foreach ($data as $i => $fieldName)
+                    foreach ($fields as $i => $fieldName)
                     {
-                        $params[$fieldName] = $matches[$i + 1][0];
+                        $data[$fieldName] = $matches[$i + 1][0];
                     }
 
                     return true;
@@ -237,9 +242,7 @@ class HttpRoute
             return true;
         }
 
-        return Imi::checkCompareRules($params, function (string $name) use ($request) {
-            return $request->get($name);
-        });
+        return Imi::checkCompareRules($params, static fn (string $name) => $request->get($name));
     }
 
     /**
@@ -255,9 +258,7 @@ class HttpRoute
             return true;
         }
 
-        return Imi::checkCompareRules($params, function (string $name) use ($request) {
-            return $request->post($name);
-        });
+        return Imi::checkCompareRules($params, static fn (string $name) => $request->post($name));
     }
 
     /**
@@ -278,7 +279,7 @@ class HttpRoute
         $parsedBody = $request->getParsedBody();
         $isObject = \is_object($parsedBody);
 
-        return Imi::checkCompareRules($params, function (string $name) use ($parsedBody, $isObject, $paramsBodyMultiLevel) {
+        return Imi::checkCompareRules($params, static function (string $name) use ($parsedBody, $isObject, $paramsBodyMultiLevel) {
             if ($paramsBodyMultiLevel)
             {
                 return ObjectArrayHelper::get($parsedBody, $name);
@@ -307,9 +308,7 @@ class HttpRoute
             return true;
         }
 
-        return Imi::checkCompareRules($header, function (string $name) use ($request) {
-            return $request->getHeaderLine($name);
-        });
+        return Imi::checkCompareRules($header, static fn (string $name) => $request->getHeaderLine($name));
     }
 
     /**

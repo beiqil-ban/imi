@@ -16,10 +16,7 @@ use <?php echo $baseClassName; ?> as Model;
 /**
  * <?php echo $tableComment; ?> 基类.
  *
- * <?php if (true === $entity) { ?>@Entity<?php }
-else
-{ ?>@Entity(false)<?php } ?>
-
+ * @Entity(camel=<?php echo var_export($entity, true); ?>, bean=<?php echo var_export($bean, true); ?>)
  * @Table(name=@ConfigValue(name="@app.models.<?php echo $namespace; ?>\<?php echo $className; ?>.name", default="<?php echo $table['name']; ?>")<?php if (isset($table['id'][0])) { ?>, id={<?php echo '"', implode('", "', $table['id']), '"'; ?>}<?php } ?>, dbPoolName=@ConfigValue(name="@app.models.<?php echo $namespace; ?>\<?php echo $className; ?>.poolName"<?php if (null !== $poolName) {?>, default="<?php echo $poolName; ?>"<?php }?>))
  * @DDL(sql="<?php echo str_replace('"', '""', $ddl); ?>", decode="<?php echo $ddlDecode; ?>")
  *
@@ -44,7 +41,7 @@ abstract class <?php echo $className; ?>Base extends Model
      * <?php echo $field['name']; ?>
 
 <?php } ?>
-     * @Column(name="<?php echo $field['name']; ?>", type="<?php echo $field['type']; ?>", length=<?php echo $field['length']; ?>, accuracy=<?php echo $field['accuracy']; ?>, nullable=<?php echo json_encode($field['nullable']); ?>, default="<?php echo $field['default']; ?>", isPrimaryKey=<?php echo json_encode($field['isPrimaryKey']); ?>, primaryKeyIndex=<?php echo $field['primaryKeyIndex']; ?>, isAutoIncrement=<?php echo json_encode($field['isAutoIncrement']); ?>)
+     * @Column(name="<?php echo $field['name']; ?>", type="<?php echo $field['type']; ?>", length=<?php echo $field['length']; ?>, accuracy=<?php echo $field['accuracy']; ?>, nullable=<?php echo json_encode($field['nullable']); ?>, default="<?php echo $field['default']; ?>", isPrimaryKey=<?php echo json_encode($field['isPrimaryKey']); ?>, primaryKeyIndex=<?php echo $field['primaryKeyIndex']; ?>, isAutoIncrement=<?php echo json_encode($field['isAutoIncrement']); ?>, unsigned=<?php echo json_encode($field['unsigned']); ?>)
      * @var <?php echo $field['phpType']; ?>
 
      */
@@ -56,7 +53,7 @@ abstract class <?php echo $className; ?>Base extends Model
      * @return <?php echo $field['phpType']; ?>
 
      */
-    public function <?php if ($field['ref']){?>&<?php } ?>get<?php echo ucfirst($field['varName']); ?>()<?php if ($field['typeDefinition'] && $field['phpDefinitionType']) { ?>: <?php echo $field['phpDefinitionType']; ?><?php } ?>
+    public function <?php if ($field['ref']){?> & <?php } ?>get<?php echo ucfirst($field['varName']); ?>()<?php if ($field['typeDefinition'] && $field['phpDefinitionType']) { ?>: <?php echo $field['phpDefinitionType']; ?><?php } ?>
 
     {
         return $this-><?php echo $field['varName']; ?>;

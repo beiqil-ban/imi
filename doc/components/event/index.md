@@ -21,21 +21,21 @@ use Imi\Bean\Annotation\Listener;
  */
 class Init implements IEventListener
 {
-	/**
-	 * 事件处理方法
-	 * @param EventParam $e
-	 * @return void
-	 */
-	public function handle(EventParam $e)
-	{
-		// ...
-	}
+    /**
+     * 事件处理方法
+     * @param EventParam $e
+     * @return void
+     */
+    public function handle(EventParam $e)
+    {
+        // ...
+    }
 }
 ```
 
 首先需要定义一个类，类名和位置无所谓。
 
-类必须实现`IEventListener`接口和`public function handle(EventParam $e)`方法。
+类必须实现`IEventListener`接口和`public function handle(EventParam $e): void`方法。
 
 然后在类上写`@Listener`注解。注解有两个参数：
 
@@ -50,12 +50,12 @@ class Init implements IEventListener
 use Imi\Event\Event;
 
 Event::on('事件名', function(){
-	// 事件回调
+    // 事件回调
 });
 
 $priority = 0;
 Event::on('事件名', function(){
-	// 事件回调
+    // 事件回调
 }, $priority);
 
 // 监听只触发一次
@@ -117,7 +117,7 @@ class BeforeRequest implements IRequestEventListener
 	 * @param RequestEventParam $e
 	 * @return void
 	 */
-	public function handle(RequestEventParam $e)
+	public function handle(RequestEventParam $e): void
 	{
 		// ...
 	}

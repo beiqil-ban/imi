@@ -77,7 +77,7 @@ class Statement extends MysqlBaseStatement implements IMysqlStatement
     /**
      * {@inheritDoc}
      */
-    public function bindColumn($column, &$param, ?int $type = null, ?int $maxLen = null, $driverData = null): bool
+    public function bindColumn($column, &$param, ?int $type = null, ?int $maxLen = 0, $driverData = null): bool
     {
         $this->bindValues[$column] = $param;
 
@@ -87,7 +87,7 @@ class Statement extends MysqlBaseStatement implements IMysqlStatement
     /**
      * {@inheritDoc}
      */
-    public function bindParam($parameter, &$variable, int $dataType = \PDO::PARAM_STR, ?int $length = null, $driverOptions = null): bool
+    public function bindParam($parameter, &$variable, int $dataType = \PDO::PARAM_STR, ?int $length = 0, $driverOptions = null): bool
     {
         $this->bindValues[$parameter] = $variable;
 
@@ -155,7 +155,15 @@ class Statement extends MysqlBaseStatement implements IMysqlStatement
             $result = $this->db->getInstance()->query($this->lastSql);
             if (false === $result)
             {
-                throw new DbException('SQL query error: [' . $this->errorCode() . '] ' . $this->errorInfo() . ' sql: ' . $this->getSql());
+                $db = $this->db;
+                $dbInstance = $db->getInstance();
+                $errorCode = $dbInstance->errorCode();
+                $errorInfo = $dbInstance->errorInfo();
+                if ($db->checkCodeIsOffline($errorCode))
+                {
+                    $db->close();
+                }
+                throw new DbException('SQL query error: [' . $errorCode . '] ' . $errorInfo . \PHP_EOL . 'sql: ' . $this->getSql() . \PHP_EOL);
             }
         }
         else
@@ -179,6 +187,11 @@ class Statement extends MysqlBaseStatement implements IMysqlStatement
                         elseif (isset($inputParameters[$key = ':' . $paramName]))
                         {
                             $bindValues[$index] = $inputParameters[$key];
+                        }
+                        else
+                        {
+                            // for inputParameters paramName : null
+                            $bindValues[$index] = null;
                         }
                     }
                 }
@@ -206,7 +219,13 @@ class Statement extends MysqlBaseStatement implements IMysqlStatement
             }
             elseif (false === $result)
             {
-                throw new DbException('SQL query error: [' . $this->errorCode() . '] ' . $this->errorInfo() . ' sql: ' . $this->getSql());
+                $errorCode = $this->errorCode();
+                $errorInfo = $this->errorInfo();
+                if ($this->db->checkCodeIsOffline($errorCode))
+                {
+                    $this->db->close();
+                }
+                throw new DbException('SQL query error: [' . $errorCode . '] ' . $errorInfo . \PHP_EOL . 'sql: ' . $this->getSql() . \PHP_EOL);
             }
         }
         $this->result = (true === $result ? [] : $result);
@@ -261,7 +280,7 @@ class Statement extends MysqlBaseStatement implements IMysqlStatement
     /**
      * {@inheritDoc}
      */
-    public function fetchObject(string $className = 'stdClass', ?array $ctorArgs = null)
+    public function fetchObject(string $className = \stdClass::class, ?array $ctorArgs = null)
     {
         $row = current($this->result);
         if (false === $row)
@@ -269,7 +288,7 @@ class Statement extends MysqlBaseStatement implements IMysqlStatement
             return null;
         }
         next($this->result);
-        if ('stdClass' === $className)
+        if (\stdClass::class === $className)
         {
             return (object) $row;
         }
@@ -383,8 +402,7 @@ class Statement extends MysqlBaseStatement implements IMysqlStatement
     /**
      * {@inheritDoc}
      */
-    #[\ReturnTypeWillChange]
-    public function valid()
+    public function valid(): bool
     {
         return false !== $this->current();
     }

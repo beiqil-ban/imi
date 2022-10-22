@@ -8,7 +8,10 @@ use Channel\Client;
 use GatewayWorker\Lib\Gateway;
 use Imi\App;
 use Imi\Config;
+use Imi\ConnectionContext;
 use Imi\Event\Event;
+use Imi\Log\Handler\ConsoleHandler;
+use Imi\Log\Logger;
 use Imi\RequestContext;
 use Imi\Server\Contract\BaseServer;
 use Imi\Server\Group\Contract\IServerGroup;
@@ -19,6 +22,7 @@ use Imi\Util\Socket\IPEndPoint;
 use Imi\Worker as ImiWorker;
 use Imi\Workerman\Server\Contract\IWorkermanServer;
 use InvalidArgumentException;
+use Symfony\Component\Console\Output\StreamOutput;
 use Workerman\Connection\ConnectionInterface;
 use Workerman\Connection\TcpConnection;
 use Workerman\Worker;
@@ -108,7 +112,7 @@ abstract class Base extends BaseServer implements IWorkermanServer, IServerGroup
      */
     public function shutdown(): void
     {
-        Worker::stopAll();
+        $this->workerClass::stopAll();
     }
 
     /**
@@ -116,7 +120,7 @@ abstract class Base extends BaseServer implements IWorkermanServer, IServerGroup
      */
     public function reload(): void
     {
-        Worker::reloadAllWorkers();
+        $this->workerClass::reloadAllWorkers();
     }
 
     /**
@@ -202,6 +206,7 @@ abstract class Base extends BaseServer implements IWorkermanServer, IServerGroup
                     'server'   => $this,
                     'clientId' => $clientId,
                 ]);
+                ConnectionContext::create();
                 Event::trigger('IMI.WORKERMAN.SERVER.CONNECT', [
                     'server'     => $this,
                     'clientId'   => $clientId,
@@ -267,6 +272,23 @@ abstract class Base extends BaseServer implements IWorkermanServer, IServerGroup
                 // 随机数播种
                 mt_srand();
 
+                $workerClass = $this->workerClass;
+                if ($workerClass::$daemonize)
+                {
+                    /** @var Logger $loggerInstance */
+                    $loggerInstance = App::getBean('Logger');
+                    foreach ($loggerInstance->getLoggers() as $logger)
+                    {
+                        foreach ($logger->getHandlers() as $handler)
+                        {
+                            if ($handler instanceof ConsoleHandler)
+                            {
+                                $handler->setOutput($stdoutStream ??= new StreamOutput(fopen($workerClass::$stdoutFile, 'a')));
+                            }
+                        }
+                    }
+                }
+
                 Imi::loadRuntimeInfo(Imi::getCurrentModeRuntimePath('runtime'));
 
                 // 创建共享 Worker 的服务
@@ -298,7 +320,7 @@ abstract class Base extends BaseServer implements IWorkermanServer, IServerGroup
                 {
                     Client::connect($channel['host'] ?: '127.0.0.1', $channel['port'] ?: 2206);
                     // 监听进程通讯
-                    $callback = function (array $data) {
+                    $callback = static function (array $data) {
                         $action = $data['action'] ?? null;
                         if (!$action)
                         {
@@ -313,7 +335,7 @@ abstract class Base extends BaseServer implements IWorkermanServer, IServerGroup
                     Client::on('imi.process.message.' . $workerId, $callback);
                 }
 
-                if (isset($config['configs']['registerAddress']))
+                if (isset($config['configs']['registerAddress']) && class_exists(Gateway::class))
                 {
                     Gateway::$registerAddress = $config['configs']['registerAddress'];
                 }
@@ -331,6 +353,10 @@ abstract class Base extends BaseServer implements IWorkermanServer, IServerGroup
                 foreach (ServerManager::getServers() as $name => $_)
                 {
                     Server::getInstance($name);
+                    if ($channel)
+                    {
+                        Client::on('imi.process.message.' . $name . '.' . $workerId, $callback);
+                    }
                 }
                 RequestContext::destroy();
             }

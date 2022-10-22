@@ -4,14 +4,11 @@ declare(strict_types=1);
 
 namespace Imi\Model\Annotation\Relation;
 
-use Imi\Bean\Annotation\Parser;
-
 /**
  * 多态一对一
  *
  * @Annotation
  * @Target("PROPERTY")
- * @Parser("Imi\Bean\Parser\NullParser")
  *
  * @property string        $model      关联的模型类；可以是包含命名空间的完整类名；可以同命名空间下的类名
  * @property string        $type       多态类型字段名
@@ -20,7 +17,7 @@ use Imi\Bean\Annotation\Parser;
  * @property bool          $with       关联预加载查询
  * @property string[]|null $withFields 设置结果模型的序列化字段
  */
-#[\Attribute(\Attribute::TARGET_PROPERTY)]
+#[\Attribute(\Attribute::TARGET_PROPERTY | \Attribute::IS_REPEATABLE)]
 class PolymorphicOneToOne extends RelationBase
 {
     /**

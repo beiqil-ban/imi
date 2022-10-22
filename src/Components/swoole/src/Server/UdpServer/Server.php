@@ -12,6 +12,8 @@ use Imi\Swoole\Server\Base;
 use Imi\Swoole\Server\Contract\ISwooleServer;
 use Imi\Swoole\Server\Contract\ISwooleUdpServer;
 use Imi\Swoole\Server\Event\Param\PacketEventParam;
+use Imi\Swoole\Util\Co\ChannelContainer;
+use Imi\Worker;
 
 /**
  * UDP 服务器类.
@@ -82,6 +84,10 @@ class Server extends Base implements ISwooleUdpServer
             $this->swoolePort->on('packet', \is_callable($event) ? $event : function (\Swoole\Server $server, string $data, array $clientInfo) {
                 try
                 {
+                    if (!Worker::isInited())
+                    {
+                        ChannelContainer::pop('workerInit');
+                    }
                     $this->trigger('packet', [
                         'server'        => $this,
                         'data'          => $data,
@@ -97,7 +103,7 @@ class Server extends Base implements ISwooleUdpServer
         }
         else
         {
-            $this->swoolePort->on('packet', function () {
+            $this->swoolePort->on('packet', static function () {
             });
         }
     }

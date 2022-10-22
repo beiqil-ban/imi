@@ -21,8 +21,10 @@ use Imi\Swoole\Server\Event\Param\WorkerStartEventParam;
 use Imi\Swoole\Server\Http\Listener\BeforeRequest;
 use Imi\Swoole\Server\Http\Listener\Http2AfterClose;
 use Imi\Swoole\Server\Http\Listener\Http2BeforeClose;
+use Imi\Swoole\Util\Co\ChannelContainer;
 use Imi\Util\Bit;
 use Imi\Util\ImiPriority;
+use Imi\Worker;
 use Swoole\Http\Server as HttpServer;
 
 /**
@@ -115,6 +117,10 @@ class Server extends Base implements ISwooleHttpServer
             $this->swoolePort->on('request', \is_callable($event) ? $event : function (\Swoole\Http\Request $swooleRequest, \Swoole\Http\Response $swooleResponse) {
                 try
                 {
+                    if (!Worker::isInited())
+                    {
+                        ChannelContainer::pop('workerInit');
+                    }
                     $request = new SwooleRequest($this, $swooleRequest);
                     $response = new SwooleResponse($this, $swooleResponse);
                     RequestContext::muiltiSet([
@@ -142,14 +148,14 @@ class Server extends Base implements ISwooleHttpServer
         }
         else
         {
-            $this->swoolePort->on('request', function () {
+            $this->swoolePort->on('request', static function () {
             });
         }
 
         if ($event = ($events['close'] ?? false) || $this->http2)
         {
             // @phpstan-ignore-next-line
-            $this->swoolePort->on('close', \is_callable($event) ? $event : function (HttpServer $server, int $fd, int $reactorId) {
+            $this->swoolePort->on('close', \is_callable($event) ? $event : function (\Swoole\Server $server, int $fd, int $reactorId) {
                 try
                 {
                     $this->trigger('close', [
@@ -167,7 +173,7 @@ class Server extends Base implements ISwooleHttpServer
         }
         else
         {
-            $this->swoolePort->on('close', function () {
+            $this->swoolePort->on('close', static function () {
             });
         }
     }

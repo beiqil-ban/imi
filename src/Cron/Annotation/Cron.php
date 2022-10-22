@@ -5,14 +5,12 @@ declare(strict_types=1);
 namespace Imi\Cron\Annotation;
 
 use Imi\Bean\Annotation\Base;
-use Imi\Bean\Annotation\Parser;
 
 /**
  * 定时任务注解.
  *
  * @Annotation
  * @Target("CLASS")
- * @Parser("Imi\Bean\Parser\NullParser")
  *
  * @property string|null $id               任务唯一ID
  * @property string|null $type             任务类型；\Imi\Cron\Consts\CronTaskType 类常量
@@ -30,7 +28,7 @@ use Imi\Bean\Annotation\Parser;
  * @property float       $lockWaitTimeout  获取锁超时时间，单位：秒
  * @property float       $maxExecutionTime 最大运行执行时间，单位：秒；该值与分布式锁超时时间共享，默认为 60 秒
  */
-#[\Attribute(\Attribute::TARGET_CLASS)]
+#[\Attribute(\Attribute::TARGET_CLASS | \Attribute::IS_REPEATABLE)]
 class Cron extends Base
 {
     /**

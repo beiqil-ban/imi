@@ -128,13 +128,13 @@ interface IQuery
      * 设置 where 条件，支持语法如下：.
      *
      * [
-     *      'id'	=>	1,
-     *      'or'	=>	[
-     *          'id'	=>	2,
+     *      'id'    => 1,
+     *      'or'    => [
+     *          'id' => 2,
      *      ],
-     *      'title'	    =>	['like', '%test%'],
-     *      'age'	    =>	['>', 18],
-     *      'age'  =>  ['between', 19, 29]
+     *      'title' => ['like', '%test%'],
+     *      'age'   => ['>', 18],
+     *      'age'   => ['between', 19, 29]
      * ]
      *
      * SQL: id = 1 or (id = 2) and title like '%test%' and age > 18 and age between 19 and 29
@@ -470,7 +470,7 @@ interface IQuery
 
     /**
      * 批量插入数据
-     * 以第 0 个成员作为字段标准.
+     * 以首个成员作为字段标准.
      *
      * @param array|object|null $data
      */
